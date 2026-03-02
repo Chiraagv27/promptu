@@ -49,7 +49,7 @@ export function StatsBar({ refreshTrigger = 0 }: StatsBarProps) {
 
   if (loading) {
     return (
-      <div className="flex items-center gap-4 rounded-lg border border-zinc-200 bg-white px-4 py-3 dark:border-zinc-700 dark:bg-zinc-900">
+      <div className="flex items-center gap-4 rounded-lg bg-white px-4 py-3 dark:bg-zinc-900">
         <div className="flex items-center gap-2 text-sm font-medium text-zinc-400 dark:text-zinc-500">
           <BarChart3 className="h-4 w-4 animate-pulse" />
           Loading analytics…
@@ -68,7 +68,7 @@ export function StatsBar({ refreshTrigger = 0 }: StatsBarProps) {
       : null;
 
   return (
-    <div className="flex flex-wrap items-center gap-4 rounded-lg border border-zinc-200 bg-white px-4 py-3 dark:border-zinc-700 dark:bg-zinc-900">
+    <div className="flex flex-wrap items-center gap-4 rounded-lg bg-white px-4 py-3 dark:bg-zinc-900">
       <div className="flex items-center gap-2 text-sm font-medium text-zinc-700 dark:text-zinc-300">
         <BarChart3 className="h-4 w-4" />
         Analytics

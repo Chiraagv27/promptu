@@ -78,11 +78,11 @@ export function ApiKeyDialog({
               onProviderChange(p);
               setLocalKey(loadStoredKey(p));
             }}
-            className="rounded-lg border border-zinc-200 bg-white px-3 py-2 text-sm dark:border-zinc-600 dark:bg-zinc-800 dark:text-zinc-100"
+            className="cursor-pointer rounded-lg border border-zinc-200 bg-white px-3 py-2 text-sm dark:border-zinc-600 dark:bg-zinc-800 dark:text-zinc-100"
           >
-            <option value="gemini">Gemini (default)</option>
-            <option value="openai">OpenAI</option>
-            <option value="anthropic">Anthropic</option>
+            <option value="gemini" className="cursor-pointer">Gemini (default)</option>
+            <option value="openai" className="cursor-pointer">OpenAI</option>
+            <option value="anthropic" className="cursor-pointer">Anthropic</option>
           </select>
 
           {provider !== 'gemini' && (
@@ -105,14 +105,14 @@ export function ApiKeyDialog({
           <button
             type="button"
             onClick={onClose}
-            className="rounded-lg border border-zinc-200 px-4 py-2 text-sm font-medium text-zinc-700 dark:border-zinc-600 dark:text-zinc-300"
+            className="cursor-pointer rounded-lg border border-zinc-200 px-4 py-2 text-sm font-medium text-zinc-700 dark:border-zinc-600 dark:text-zinc-300"
           >
             Cancel
           </button>
           <button
             type="button"
             onClick={handleSave}
-            className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700"
+            className="cursor-pointer rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700"
           >
             Save
           </button>

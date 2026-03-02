@@ -25,7 +25,7 @@ export function ModeSelector({ value, onChange, disabled }: ModeSelectorProps) {
             type="button"
             onClick={() => onChange(m.value)}
             disabled={disabled}
-            className={`rounded-full px-4 py-2 text-sm font-medium transition ${
+            className={`cursor-pointer rounded-full px-4 py-2 text-sm font-medium transition ${
               active
                 ? 'bg-blue-600 text-white'
                 : 'border border-zinc-300 bg-white text-zinc-700 hover:bg-zinc-50 dark:border-zinc-600 dark:bg-zinc-800 dark:text-zinc-300 dark:hover:bg-zinc-700'

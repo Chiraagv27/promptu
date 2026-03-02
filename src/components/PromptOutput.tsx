@@ -20,7 +20,6 @@ export function PromptOutput({
   onScore,
 }: PromptOutputProps) {
   const [copied, setCopied] = useState(false);
-  const sentRef = useRef(false);
   const scoreSentRef = useRef(false);
 
   const explIdx = text.indexOf(EXPLANATION_DELIMITER);
@@ -36,14 +35,12 @@ export function PromptOutput({
 
   useEffect(() => {
     if (!text) {
-      sentRef.current = false;
       scoreSentRef.current = false;
     }
   }, [text]);
 
   useEffect(() => {
-    if (explanation && onExplanation && !sentRef.current) {
-      sentRef.current = true;
+    if (explanation && onExplanation) {
       onExplanation(explanation);
     }
   }, [explanation, onExplanation]);

@@ -18,7 +18,7 @@ export function Header({ onSettingsClick }: HeaderProps) {
       <button
         type="button"
         onClick={onSettingsClick}
-        className="rounded-lg p-2 text-zinc-500 transition hover:bg-zinc-100 hover:text-zinc-700 dark:hover:bg-zinc-800 dark:hover:text-zinc-300"
+        className="cursor-pointer rounded-lg p-2 text-zinc-500 transition hover:bg-zinc-100 hover:text-zinc-700 dark:hover:bg-zinc-800 dark:hover:text-zinc-300"
         aria-label="Settings"
       >
         <Settings className="h-5 w-5" />

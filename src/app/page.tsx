@@ -10,6 +10,8 @@ import { PromptOutput } from '@/components/PromptOutput';
 import { ExplanationPanel } from '@/components/ExplanationPanel';
 import { FeedbackButtons } from '@/components/FeedbackButtons';
 import { StatsBar } from '@/components/StatsBar';
+import { Hero } from '@/components/Hero';
+import { Footer } from '@/components/Footer';
 import type { OptimizationMode, Provider } from '@/lib/types';
 
 const STORAGE_KEY = 'promptperfect:apikey';
@@ -108,54 +110,57 @@ export default function Home() {
   return (
     <div className="flex min-h-screen flex-col bg-zinc-50 dark:bg-zinc-950">
       <Header onSettingsClick={() => setSettingsOpen(true)} />
-      <div className="border-b border-zinc-200 bg-white px-4 py-2 dark:border-zinc-800 dark:bg-zinc-900">
-        <StatsBar refreshTrigger={statsRefresh} />
-      </div>
+      
+      <Hero />
 
-      <main className="flex-1 p-4 md:p-6">
-        <div className="mx-auto grid max-w-6xl gap-6 lg:grid-cols-2">
-          <div className="flex flex-col gap-4">
-            <h2 className="text-sm font-medium text-zinc-700 dark:text-zinc-300">
-              Your prompt
-            </h2>
-            <PromptInput
-              value={inputText}
-              onChange={setInputText}
-              disabled={isLoading}
-            />
+      <main className="flex-1 bg-zinc-50 p-4 dark:bg-zinc-950 md:p-6">
+        <div id="optimizer" className="mx-auto max-w-6xl space-y-6">
+          <div className="rounded-xl border border-zinc-200 bg-white p-2 shadow-sm dark:border-zinc-800 dark:bg-zinc-900">
+            <StatsBar refreshTrigger={statsRefresh} />
+          </div>
+          
+          <div className="grid gap-6 lg:grid-cols-2">
+            <div className="flex flex-col gap-4">
+              <h2 className="text-sm font-medium text-zinc-700 dark:text-zinc-300">
+                Your prompt
+              </h2>
+              <PromptInput
+                value={inputText}
+                onChange={setInputText}
+                disabled={isLoading}
+              />
+            </div>
+
+            <div className="flex flex-col gap-4">
+              <h2 className="text-sm font-medium text-zinc-700 dark:text-zinc-300">
+                Optimized prompt
+              </h2>
+              <PromptOutput
+                text={completion}
+                isStreaming={isLoading}
+                onExplanation={setExplanation}
+                onScore={
+                  sessionId
+                    ? (score) => saveScore(sessionId, score)
+                    : undefined
+                }
+              />
+              {completion && !isLoading && (
+                <div className="flex justify-end">
+                  <FeedbackButtons
+                    sessionId={sessionId}
+                    mode={runMeta?.mode ?? selectedMode}
+                    provider={runMeta?.provider ?? provider}
+                    inputLength={runMeta?.inputLength ?? inputText.trim().length}
+                    outputLength={getOptimizedPromptText(completion).length}
+                    disabled={false}
+                    onSubmitted={() => setStatsRefresh((n) => n + 1)}
+                  />
+                </div>
+              )}
+            </div>
           </div>
 
-          <div className="flex flex-col gap-4">
-            <h2 className="text-sm font-medium text-zinc-700 dark:text-zinc-300">
-              Optimized prompt
-            </h2>
-            <PromptOutput
-              text={completion}
-              isStreaming={isLoading}
-              onExplanation={setExplanation}
-              onScore={
-                sessionId
-                  ? (score) => saveScore(sessionId, score)
-                  : undefined
-              }
-            />
-            {completion && !isLoading && (
-              <div className="flex justify-end">
-                <FeedbackButtons
-                  sessionId={sessionId}
-                  mode={runMeta?.mode ?? selectedMode}
-                  provider={runMeta?.provider ?? provider}
-                  inputLength={runMeta?.inputLength ?? inputText.trim().length}
-                  outputLength={getOptimizedPromptText(completion).length}
-                  disabled={false}
-                  onSubmitted={() => setStatsRefresh((n) => n + 1)}
-                />
-              </div>
-            )}
-          </div>
-        </div>
-
-        <div className="mx-auto mt-6 max-w-6xl">
           <div className="flex flex-col items-center gap-4">
             <ModeSelector
               value={selectedMode}
@@ -166,7 +171,7 @@ export default function Home() {
               type="button"
               onClick={handleOptimize}
               disabled={!inputText.trim() || isLoading}
-              className="rounded-lg bg-blue-600 px-6 py-2.5 text-sm font-semibold text-white transition hover:bg-blue-700 disabled:opacity-50"
+              className="cursor-pointer rounded-lg bg-blue-600 px-6 py-2.5 text-sm font-semibold text-white transition hover:bg-blue-700 disabled:opacity-50"
             >
               {isLoading ? 'Optimizing…' : 'Optimize'}
             </button>
@@ -183,6 +188,8 @@ export default function Home() {
           </div>
         </div>
       </main>
+
+      <Footer />
 
       {settingsOpen && (
         <ApiKeyDialog

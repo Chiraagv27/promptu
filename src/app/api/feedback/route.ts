@@ -1,4 +1,4 @@
-import { createClient } from '@supabase/supabase-js';
+import { getSupabaseClient } from '@/lib/supabase';
 
 export const runtime = 'nodejs';
 
@@ -9,12 +9,10 @@ function isMissingColumnError(message: string): boolean {
 }
 
 export async function POST(req: Request) {
-  const url = process.env.SUPABASE_URL?.trim();
-  const key = process.env.SUPABASE_SERVICE_KEY?.trim();
-  if (!url || !key) {
+  const supabase = getSupabaseClient();
+  if (!supabase) {
     return Response.json({ error: 'Supabase not configured' }, { status: 500 });
   }
-  const supabase = createClient(url, key);
 
   const {
     mode,
@@ -39,8 +37,9 @@ export async function POST(req: Request) {
     return Response.json({ error: 'feedback is required' }, { status: 400 });
   }
 
-  // Normalize mode to match Supabase check constraint: only 'better' | 'specific' | 'cot'
-  const ALLOWED_MODES = ['better', 'specific', 'cot'] as const;
+  // Normalize mode to match Supabase check constraint.
+  // Note: 'cot' seems to trigger a check constraint violation in the DB, so we map it to 'better' for logging purposes.
+  const ALLOWED_MODES = ['better', 'specific'] as const;
   const normalizedMode = ALLOWED_MODES.includes(mode.toLowerCase() as (typeof ALLOWED_MODES)[number])
     ? (mode.toLowerCase() as (typeof ALLOWED_MODES)[number])
     : 'better';
