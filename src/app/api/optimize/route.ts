@@ -1,108 +1,48 @@
-import { generateText, streamText } from 'ai';
+import { streamText } from 'ai';
 import type { NextRequest } from 'next/server';
+import { getSystemPrompt } from '@/lib/prompts';
+import { createProvider } from '@/lib/providers';
+import type { OptimizeRequest, OptimizationMode, Provider } from '@/lib/types';
 
-import { getModeSystemPrompt } from '@/lib/prompts';
-import {
-  getLanguageModel,
-  isRetryableProviderError,
-  resolveModelList,
-} from '@/lib/providers';
-import { getSupabaseAdminClient } from '@/lib/client/supabase';
-import type { Mode, OptimizeRequest, OptimizeVersion, ProviderId } from '@/lib/types';
+const MODES: OptimizationMode[] = ['better', 'specific', 'cot'];
+const PROVIDERS: Provider[] = ['gemini', 'openai', 'anthropic'];
 
-function isMode(value: unknown): value is Mode {
-  return (
-    value === 'developer' ||
-    value === 'research' ||
-    value === 'beginner' ||
-    value === 'product' ||
-    value === 'marketing'
-  );
+function isMode(v: unknown): v is OptimizationMode {
+  return typeof v === 'string' && MODES.includes(v as OptimizationMode);
 }
 
-function isProvider(value: unknown): value is ProviderId {
-  return value === 'google';
-}
-
-async function pickFirstWorkingModel(args: {
-  provider: ProviderId;
-  apiKey?: string;
-  system: string;
-  prompt: string;
-  modelIds: string[];
-}): Promise<string> {
-  let lastError: unknown = null;
-  for (const modelId of args.modelIds) {
-    try {
-      const model = getLanguageModel(
-        { provider: args.provider, model: modelId, apiKey: args.apiKey },
-        modelId,
-      );
-
-      // Very small preflight call so we can fall back if a model is missing/quota'd.
-      await generateText({
-        model,
-        system: args.system,
-        prompt: args.prompt,
-        maxOutputTokens: 8,
-      });
-
-      return modelId;
-    } catch (err) {
-      lastError = err;
-      if (isRetryableProviderError(err)) continue;
-      break;
-    }
-  }
-
-  throw lastError instanceof Error ? lastError : new Error('No model succeeded');
+function isProvider(v: unknown): v is Provider {
+  return typeof v === 'string' && PROVIDERS.includes(v as Provider);
 }
 
 export async function POST(req: NextRequest) {
   try {
     const body = (await req.json()) as Partial<OptimizeRequest>;
-
     const prompt = typeof body.prompt === 'string' ? body.prompt.trim() : '';
     if (!prompt) {
       return Response.json({ error: 'prompt is required' }, { status: 400 });
     }
 
-    const mode: Mode = isMode(body.mode) ? body.mode : 'developer';
-    const provider: ProviderId = isProvider(body.provider) ? body.provider : 'google';
+    const mode = isMode(body.mode) ? body.mode : 'better';
+    const provider = isProvider(body.provider) ? body.provider : 'gemini';
     const apiKey = typeof body.apiKey === 'string' ? body.apiKey.trim() : undefined;
-    const modelOverride = typeof body.model === 'string' ? body.model.trim() : undefined;
 
-    if (!apiKey && !process.env.GOOGLE_API_KEY) {
+    if (provider !== 'gemini' && !apiKey) {
       return Response.json(
-        {
-          error:
-            'Missing GOOGLE_API_KEY. Add it to .env (project root) or paste a BYOK key in the UI.',
-        },
-        { status: 400 },
+        { error: `${provider} requires an API key. Add it in settings.` },
+        { status: 401 },
       );
     }
 
-    const system = getModeSystemPrompt(mode);
-    const modelIds = resolveModelList({ provider, model: modelOverride ?? '', apiKey });
-    const modelId = await pickFirstWorkingModel({ provider, apiKey, system, prompt, modelIds });
-    const model = getLanguageModel({ provider, model: modelId, apiKey }, modelId);
+    const { model } = createProvider(provider, apiKey);
+    const system = getSystemPrompt(mode);
 
-    const sessionId = typeof body.session_id === 'string' ? body.session_id.trim() : '';
-    const version = (body.version === 'v1' || body.version === 'v2' ? body.version : 'v2') as OptimizeVersion;
-    if (sessionId) {
-      const supabase = getSupabaseAdminClient();
-      if (supabase) {
-        void supabase.from('optimization_logs').insert({
-          session_id: sessionId,
-          mode,
-          version,
-          provider: 'google',
-          model: modelId,
-          prompt_length: prompt.length,
-          optimized_length: 0,
-          explanation_length: 0,
-        });
-      }
+    const sessionId =
+      (typeof body.session_id === 'string' ? body.session_id.trim() : '') ||
+      crypto.randomUUID();
+
+    if (process.env.NODE_ENV === 'development') {
+      console.log('[optimize] session_id from body:', body.session_id ? 'yes' : 'MISSING', '→ using:', sessionId.slice(0, 8) + '…');
     }
 
     const result = streamText({
@@ -111,16 +51,15 @@ export async function POST(req: NextRequest) {
       prompt,
     });
 
-    // We stream plain text; the client splits `---EXPLANATION---` live.
-    return result.toTextStreamResponse({
+    const response = result.toTextStreamResponse({
       headers: {
-        'x-promptperfect-provider': provider,
-        'x-promptperfect-model': modelId,
+        'X-PromptPerfect-Session-Id': sessionId,
       },
     });
+
+    return response;
   } catch (err) {
-    const message = err instanceof Error ? err.message : 'Failed to optimize prompt';
-    return Response.json({ error: message }, { status: 500 });
+    const msg = err instanceof Error ? err.message : 'Failed to optimize';
+    return Response.json({ error: msg }, { status: 500 });
   }
 }
-

@@ -1,31 +1,13 @@
-export type Mode = 'developer' | 'research' | 'beginner' | 'product' | 'marketing';
+export type OptimizationMode = 'better' | 'specific' | 'cot';
 
-export type ProviderId = 'google';
-
-export type OptimizeVersion = 'v1' | 'v2';
+export type Provider = 'gemini' | 'openai' | 'anthropic';
 
 export interface OptimizeRequest {
   prompt: string;
-  mode: Mode;
-  session_id?: string;
-  version?: OptimizeVersion;
-  provider?: ProviderId;
-  /**
-   * Optional BYOK key. Never persisted server-side.
-   * If not set, server env var for the provider must exist.
-   */
+  mode: OptimizationMode;
+  provider: Provider;
+  /** BYOK key for openai/anthropic. Never persisted server-side. */
   apiKey?: string;
-  /**
-   * Optional model override (advanced). If not provided, we use defaults/fallbacks.
-   */
-  model?: string;
+  /** Client-generated session ID for feedback. */
+  session_id?: string;
 }
-
-export interface OptimizeResponseV1 {
-  optimizedText: string;
-  explanation: string;
-  rawText: string;
-  provider: ProviderId;
-  model: string;
-}
-

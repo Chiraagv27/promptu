@@ -1,61 +1,35 @@
-import { google, createGoogleGenerativeAI } from '@ai-sdk/google';
+import { createGoogleGenerativeAI } from '@ai-sdk/google';
+import { createOpenAI } from '@ai-sdk/openai';
+import { createAnthropic } from '@ai-sdk/anthropic';
+import type { Provider } from './types';
 
-import type { ProviderId } from './types';
+import type { LanguageModelV2, LanguageModelV3 } from '@ai-sdk/provider';
 
-export interface ProviderSelection {
-  provider: ProviderId;
-  model: string;
-  apiKey?: string;
+export interface ProviderConfig {
+  model: LanguageModelV2 | LanguageModelV3;
+  modelId: string;
 }
 
-export function hasServerKey(provider: ProviderId): boolean {
-  if (provider !== 'google') return false;
-  return Boolean(process.env.GOOGLE_API_KEY);
+export function createProvider(providerId: Provider, apiKey?: string): ProviderConfig {
+  switch (providerId) {
+    case 'gemini': {
+      // Support both names (Vercel / some docs use GEMINI_API_KEY)
+      const key = (process.env.GOOGLE_API_KEY ?? process.env.GEMINI_API_KEY ?? '').trim();
+      if (!key) throw new Error('GOOGLE_API_KEY is not set. Add it in Vercel → Settings → Environment Variables, then redeploy.');
+      const google = createGoogleGenerativeAI({ apiKey: key });
+      return { model: google('gemini-2.0-flash'), modelId: 'gemini-2.0-flash' };
+    }
+    case 'openai': {
+      if (!apiKey?.trim()) throw new Error('OpenAI requires an API key');
+      const openai = createOpenAI({ apiKey: apiKey.trim() });
+      return { model: openai('gpt-4o-mini'), modelId: 'gpt-4o-mini' };
+    }
+    case 'anthropic': {
+      if (!apiKey?.trim()) throw new Error('Anthropic requires an API key');
+      const anthropic = createAnthropic({ apiKey: apiKey.trim() });
+      return { model: anthropic('claude-3-5-haiku-latest'), modelId: 'claude-3-5-haiku-latest' };
+    }
+    default:
+      throw new Error(`Unknown provider: ${providerId}`);
+  }
 }
-
-function getProviderInstance(provider: ProviderId, apiKey?: string) {
-  const key = apiKey?.trim();
-
-  if (provider !== 'google') return google;
-
-  // Single source of truth: GOOGLE_API_KEY
-  // (Optional) apiKey can override via BYOK in request body.
-  const effectiveKey = key || process.env.GOOGLE_API_KEY;
-  if (!effectiveKey) return google;
-  return createGoogleGenerativeAI({ apiKey: effectiveKey });
-}
-
-export function getDefaultModels(provider: ProviderId): string[] {
-  if (provider !== 'google') return [];
-  return [
-    'gemini-2.5-flash',
-    'gemini-2.5-flash-lite',
-    'gemini-2.5-pro',
-    'gemini-3-flash-preview',
-    'gemini-3-pro-preview',
-  ];
-}
-
-export function isRetryableProviderError(err: unknown): boolean {
-  const msg = err instanceof Error ? err.message : String(err);
-  return (
-    msg.includes('429') ||
-    msg.toLowerCase().includes('rate limit') ||
-    msg.toLowerCase().includes('quota') ||
-    msg.includes('RESOURCE_EXHAUSTED') ||
-    msg.includes('404') ||
-    msg.toLowerCase().includes('not found')
-  );
-}
-
-export function resolveModelList(selection: ProviderSelection): string[] {
-  if (selection.model?.trim()) return [selection.model.trim()];
-  return getDefaultModels(selection.provider);
-}
-
-export function getLanguageModel(selection: ProviderSelection, modelId: string) {
-  const instance = getProviderInstance(selection.provider, selection.apiKey);
-  // All provider instances are callable: provider(modelId)
-  return instance(modelId);
-}
-

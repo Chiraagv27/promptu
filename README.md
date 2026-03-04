@@ -1,85 +1,101 @@
-PromptPerfect is a Next.js app that **rewrites prompts** into a clearer, more effective version and returns a short explanation of what changed.
+# PromptPerfect
+
+> PromptPerfect is an open-source prompt optimization tool that automatically improves your LLM prompts and explains the changes.
+
+![PromptPerfect Screenshot](https://raw.githubusercontent.com/Beagle-AI-automation/promptperfect/main/public/screenshot.png)
+
+PromptPerfect takes your draft prompts—whether vague, messy, or just a rough idea—and transforms them into high-quality, engineered prompts using AI. It doesn't just rewrite them; it teaches you *why* the changes were made, helping you become a better prompt engineer over time. Choose from modes like "Make it Better," "Make it Specific," or "Add Chain-of-Thought" to get exactly the result you need.
+
+## Features
+
+- **Instant Optimization**: Turn simple phrases into professional prompts in seconds.
+- **Detailed Explanations**: Learn the "why" behind every change with educational breakdowns.
+- **Multiple Modes**:
+  - **Better**: General improvement for clarity and robustness.
+  - **Specific**: Adds constraints and details to reduce hallucinations.
+  - **Chain-of-Thought**: Structures the prompt to encourage step-by-step reasoning.
+- **Privacy-First**: Your API keys are stored locally in your browser and never saved to our servers.
+- **Open Source**: Built with modern web technologies, free to use and extend.
+
+## Tech Stack
+
+| Component | Technology |
+| :--- | :--- |
+| **Framework** | Next.js 14 (App Router) |
+| **Language** | TypeScript |
+| **Styling** | Tailwind CSS + shadcn/ui |
+| **AI Integration** | Vercel AI SDK |
+| **Icons** | Lucide React |
+| **Database** | Supabase (for analytics) |
+| **Deployment** | Vercel |
 
 ## Getting Started
 
-### Setup
+Follow these steps to run PromptPerfect locally on your machine.
 
-1) Copy env file
+### Prerequisites
 
-```bash
-cp .env.example .env
-```
+- Node.js 18+ installed
+- A Google Gemini API key (or OpenAI/Anthropic key for BYOK)
 
-2) Add at least one server key (recommended):
-- `GOOGLE_API_KEY` (Gemini)
+### Installation
 
-Optional (for analytics logging from the browser):
-- `NEXT_PUBLIC_SUPABASE_URL`
-- `NEXT_PUBLIC_SUPABASE_ANON_KEY`
+1.  **Clone the repository:**
 
-3) If using Supabase:
+    ```bash
+    git clone https://github.com/Beagle-AI-automation/promptperfect.git
+    cd promptperfect
+    ```
 
-   Run the migration in your Supabase project → SQL Editor (or `supabase db push`):
+2.  **Install dependencies:**
 
-   ```sql
-   -- See supabase/migrations/20250218000000_create_optimization_logs.sql
-   ```
+    ```bash
+    npm install
+    ```
 
-### Run dev server
+3.  **Configure environment variables:**
 
-```bash
-npm run dev
-```
+    Create a `.env.local` file in the root directory and add your API keys:
 
-Open `http://localhost:3000`.
+    ```env
+    # Required for default provider
+    GOOGLE_API_KEY=your_gemini_api_key_here
 
-## API
+    # Optional: For analytics (Supabase)
+    NEXT_PUBLIC_SUPABASE_URL=your_supabase_url
+    NEXT_PUBLIC_SUPABASE_ANON_KEY=your_supabase_anon_key
+    ```
 
-- **v2 streaming**: `POST /api/optimize`
-  - Streams plain text output that contains:
-    - optimized prompt text
-    - delimiter `---EXPLANATION---`
-    - bullet explanations
-- **v1 sync fallback**: `POST /api/optimize-sync`
-  - Returns JSON:
-    - `optimizedText`
-    - `explanation`
-    - `rawText`
+4.  **Run the development server:**
 
-Both versions accept:
+    ```bash
+    npm run dev
+    ```
 
-```json
-{
-  "prompt": "string",
-  "mode": "developer | research | beginner | product | marketing",
-  "provider": "google",
-  "apiKey": "optional BYOK key",
-  "model": "optional model override"
-}
-```
+    Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
 
-## Old + New versions
+## Deploy Your Own
 
-- The **new app** is on `/` (PromptPerfect UI).
-- The original starter page is preserved at `/legacy`.
+You can deploy your own instance of PromptPerfect to Vercel with a single click:
 
-## Security / What to hide
+[![Deploy with Vercel](https://vercel.com/button)](https://vercel.com/new/clone?repository-url=https://github.com/Beagle-AI-automation/promptperfect&env=GOOGLE_API_KEY&envDescription=Get%20a%20Gemini%20API%20key%20from%20ai.google.dev)
 
-- **Never commit**: `.env` (and any `.env*` files containing keys), API keys, tokens, service-role keys.
-- **Never log**: `apiKey` from requests. (This app does not persist keys server-side.)
-- **Safe to commit**: `.env.example` with empty values only.
+## Contributing
 
-## Learn More
+We welcome contributions! Whether it's fixing bugs, improving documentation, or suggesting new features, your help is appreciated.
 
-To learn more about Next.js, take a look at the following resources:
+1.  Fork the repository.
+2.  Create a new branch (`git checkout -b feature/amazing-feature`).
+3.  Commit your changes (`git commit -m 'Add some amazing feature'`).
+4.  Push to the branch (`git push origin feature/amazing-feature`).
+5.  Open a Pull Request.
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+## License
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
 
-## Deploy on Vercel
+---
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+<p align="center">
+  Built by the <a href="https://github.com/Beagle-AI-automation">Beagle Builder Program</a>
+</p>
