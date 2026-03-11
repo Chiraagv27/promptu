@@ -2,6 +2,12 @@ import { generateText } from 'ai';
 import type { NextRequest } from 'next/server';
 
 import { getSystemPrompt } from '@/lib/prompts';
+
+const corsHeaders = {
+  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Methods': 'POST, OPTIONS',
+  'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+};
 import { splitOptimizedOutput } from '@/lib/delimiter';
 import { createProvider } from '@/lib/providers';
 import { getSupabaseAdminClient } from '@/lib/client/supabase';
@@ -18,13 +24,17 @@ function isProvider(v: unknown): v is Provider {
   return typeof v === 'string' && PROVIDERS.includes(v as Provider);
 }
 
+export async function OPTIONS() {
+  return new Response(null, { status: 204, headers: corsHeaders });
+}
+
 export async function POST(req: NextRequest) {
   try {
     const body = (await req.json()) as Partial<OptimizeRequest> & { version?: string };
 
     const prompt = typeof body.prompt === 'string' ? body.prompt.trim() : '';
     if (!prompt) {
-      return Response.json({ error: 'prompt is required' }, { status: 400 });
+      return Response.json({ error: 'prompt is required' }, { status: 400, headers: corsHeaders });
     }
 
     const mode = isMode(body.mode) ? body.mode : 'better';
@@ -35,7 +45,7 @@ export async function POST(req: NextRequest) {
     try {
         providerConfig = createProvider(provider, apiKey);
     } catch (e) {
-         return Response.json({ error: (e as Error).message }, { status: 400 });
+         return Response.json({ error: (e as Error).message }, { status: 400, headers: corsHeaders });
     }
     
     const { model, modelId } = providerConfig;
@@ -77,13 +87,13 @@ export async function POST(req: NextRequest) {
           rawText,
           provider,
           model: modelId,
-        });
+        }, { headers: corsHeaders });
       } catch (err) {
         const message = err instanceof Error ? err.message : 'Failed to optimize prompt';
-        return Response.json({ error: message }, { status: 500 });
+        return Response.json({ error: message }, { status: 500, headers: corsHeaders });
       }
   } catch (err) {
     const message = err instanceof Error ? err.message : 'Invalid request';
-    return Response.json({ error: message }, { status: 400 });
+    return Response.json({ error: message }, { status: 400, headers: corsHeaders });
   }
 }
