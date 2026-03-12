@@ -49,7 +49,7 @@ export default function ControlRoomPage() {
           return;
         }
         const u = JSON.parse(raw) as { id: string; provider?: string; api_key?: string };
-        setUser(u);
+        setUser({ id: u.id, provider: u.provider ?? 'gemini', api_key: u.api_key });
         if (u.provider && u.provider !== 'gemini') {
           router.replace('/app');
           return;
