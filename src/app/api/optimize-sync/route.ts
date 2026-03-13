@@ -10,6 +10,8 @@ const corsHeaders = {
 };
 import { splitOptimizedOutput } from '@/lib/delimiter';
 import { createProvider } from '@/lib/providers';
+
+const SCORE_PATTERN = /---SCORE---\d{1,3}---/g;
 import { getSupabaseAdminClient } from '@/lib/client/supabase';
 import type { OptimizationMode, OptimizeRequest, Provider } from '@/lib/types';
 
@@ -62,7 +64,8 @@ export async function POST(req: NextRequest) {
       });
 
       const rawText = result.text ?? '';
-      const { optimizedText, explanation, changes } = splitOptimizedOutput(rawText);
+      const { optimizedText: rawOptimized, explanation, changes } = splitOptimizedOutput(rawText);
+      const optimizedText = rawOptimized.replace(SCORE_PATTERN, '').trim();
 
       const sessionId = typeof body.session_id === 'string' ? body.session_id.trim() : '';
       const version = body.version === 'v1' || body.version === 'v2' ? body.version : 'v1';
