@@ -1,5 +1,12 @@
 import type { NextRequest } from 'next/server';
 
+import { getSupabaseClient } from '@/lib/supabase';
+
+/**
+ * Optional client-side persistence when the model streams a score before the
+ * server row exists. Prefer server-side `prompt_score` in `/api/optimize` and
+ * `/api/optimize-sync` inserts; this route only UPDATES existing rows.
+ */
 export async function POST(req: NextRequest) {
   try {
     const body = (await req.json()) as { session_id?: string; score?: number };
@@ -16,8 +23,29 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // PP-204 schema does not include a score column; accept but don't persist.
-    return Response.json({ ok: true, skipped: true, session_id: sessionId, score });
+    const supabase = getSupabaseClient();
+    if (!supabase) {
+      return Response.json({ ok: true, skipped: true, reason: 'no_supabase' });
+    }
+
+    const { data, error } = await supabase
+      .from('optimization_logs')
+      .update({ prompt_score: score })
+      .eq('session_id', sessionId)
+      .select('id');
+
+    if (error) {
+      console.error('[session-score] update error:', error);
+      return Response.json({ error: error.message }, { status: 500 });
+    }
+
+    const updated = (data?.length ?? 0) > 0;
+    return Response.json({
+      ok: true,
+      updated,
+      session_id: sessionId,
+      score,
+    });
   } catch {
     return Response.json({ error: 'Invalid request' }, { status: 400 });
   }

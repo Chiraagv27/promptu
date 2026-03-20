@@ -6,28 +6,55 @@ export interface AppModeSelectorProps {
   value: OptimizationMode;
   onChange: (mode: OptimizationMode) => void;
   disabled?: boolean;
+  variant?: "default" | "optimizer";
 }
 
 const MODES: { value: OptimizationMode; label: string }[] = [
-  { value: "better", label: "Better" },
-  { value: "specific", label: "Specific" },
-  { value: "cot", label: "Chain-of-thought" },
-  { value: "developer", label: "Developer" },
-  { value: "research", label: "Research" },
-  { value: "beginner", label: "Beginner" },
-  { value: "product", label: "Product" },
-  { value: "marketing", label: "Marketing" },
+  { value: "better", label: "Make it Better" },
+  { value: "specific", label: "Make it Specific" },
+  { value: "cot", label: "Add Chain-of-Thought" },
 ];
 
 export function AppModeSelector({
   value,
   onChange,
   disabled = false,
+  variant = "default",
 }: AppModeSelectorProps) {
+  if (variant === "optimizer") {
+    return (
+      <div
+        className="flex w-full flex-wrap justify-center gap-2"
+        role="group"
+        aria-label="Optimization mode"
+      >
+        {MODES.map(({ value: v, label }) => {
+          const isSelected = value === v;
+          return (
+            <button
+              key={v}
+              type="button"
+              onClick={() => onChange(v)}
+              disabled={disabled}
+              aria-pressed={isSelected}
+              className={`rounded-[20px] px-5 py-2 text-[13px] font-medium transition-colors duration-200 ease-out focus:outline-none focus-visible:ring-2 focus-visible:ring-[#4552FF] focus-visible:ring-offset-2 focus-visible:ring-offset-[#050505] disabled:opacity-50 ${
+                isSelected
+                  ? "border-0 bg-[#4552FF] text-white"
+                  : "border border-solid border-[#252525] bg-[#151515] text-[#666] hover:border-[#4552FF] hover:text-[#ccc]"
+              }`}
+            >
+              {label}
+            </button>
+          );
+        })}
+      </div>
+    );
+  }
+
   return (
     <div className="w-full min-w-0">
       <span className="mb-3 block text-sm font-medium text-zinc-700 dark:text-zinc-300">
-        Optimize for
+        Mode
       </span>
       <div
         className="flex min-w-0 flex-wrap justify-center gap-2"

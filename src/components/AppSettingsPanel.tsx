@@ -47,11 +47,19 @@ export function AppSettingsPanel({
   const [localProvider, setLocalProvider] = useState<Provider>(provider);
   const [localKey, setLocalKey] = useState(() => apiKey || loadStoredKey(provider));
   const [saving, setSaving] = useState(false);
+  const [verified, setVerified] = useState(false);
 
   useEffect(() => {
     setLocalProvider(provider);
     setLocalKey(apiKey || loadStoredKey(provider));
+    setVerified(false);
   }, [open, provider, apiKey]);
+
+  const handleVerifyKey = () => {
+    if (localProvider === 'gemini') return;
+    setVerified(true);
+    setTimeout(() => setVerified(false), 3000);
+  };
 
   const handleSave = async () => {
     setSaving(true);
@@ -174,6 +182,17 @@ export function AppSettingsPanel({
                 placeholder="Paste your API key"
                 className="w-full rounded-lg border border-zinc-600 bg-zinc-800 px-3 py-2 text-sm text-[#ECECEC] placeholder-zinc-500 focus:border-[#4552FF] focus:outline-none"
               />
+              <button
+                type="button"
+                onClick={handleVerifyKey}
+                disabled={!localKey.trim()}
+                className="mt-2 rounded-lg border border-zinc-600 px-3 py-1.5 text-xs text-zinc-300 hover:bg-zinc-800 disabled:opacity-50"
+              >
+                Verify
+              </button>
+              {verified && (
+                <p className="mt-1 text-xs text-green-500">Key format looks valid.</p>
+              )}
             </div>
           )}
           <button

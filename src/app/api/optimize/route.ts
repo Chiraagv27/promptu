@@ -1,49 +1,84 @@
-import { NextResponse } from "next/server";
-import { generateText } from "ai";
-import { getModel } from "@/lib/providers";
-import { getSystemPrompt } from "@/lib/prompts";
-import type { OptimizeMode } from "@/lib/prompts";
+import { streamText } from 'ai';
 
-const DELIMITER = "---EXPLANATION---";
+import { splitOptimizedOutput } from '@/lib/delimiter';
+import { normalizeModeForDb, parsePromptScore } from '@/lib/optimization-logs';
+import { createProvider } from '@/lib/providers';
+import { getSystemPrompt } from '@/lib/prompts';
+import type { OptimizeMode } from '@/lib/prompts';
+import { getSupabaseClient } from '@/lib/supabase';
+
+export const runtime = 'nodejs';
+
+const SCORE_PATTERN = /---SCORE---\d{1,3}---/g;
 
 export async function POST(request: Request) {
   try {
-    const body = await request.json();
-    const { prompt, mode = "better", apiKey } = body as {
+    const body = (await request.json()) as {
       prompt?: string;
-      mode?: OptimizeMode;
+      text?: string;
+      mode?: OptimizeMode | string;
       apiKey?: string;
+      session_id?: string;
+      provider?: string;
     };
 
-    if (!prompt || typeof prompt !== "string" || !prompt.trim()) {
-      return NextResponse.json(
-        { error: "Missing or empty prompt" },
-        { status: 400 }
-      );
+    const promptRaw =
+      typeof body.text === 'string' && body.text.trim()
+        ? body.text.trim()
+        : typeof body.prompt === 'string'
+          ? body.prompt.trim()
+          : '';
+
+    if (!promptRaw) {
+      return Response.json({ error: 'Missing or empty prompt' }, { status: 400 });
     }
 
-    const model = getModel(apiKey ?? null);
-    const systemPrompt = getSystemPrompt(mode ?? "better");
+    const { mode = 'better', apiKey, session_id } = body;
+    const sessionId =
+      typeof session_id === 'string' ? session_id.trim() : '';
+    const modeStr = typeof mode === 'string' ? mode : 'better';
+    const dbMode = normalizeModeForDb(modeStr);
 
-    const { text } = await generateText({
+    const { model, modelId } = createProvider('gemini', apiKey ?? undefined);
+    const systemPrompt = getSystemPrompt(modeStr);
+
+    const result = streamText({
       model,
       system: systemPrompt,
-      prompt,
+      prompt: promptRaw,
+      onFinish: async ({ text }) => {
+        try {
+          const { optimizedText: rawOpt, explanation, changes } =
+            splitOptimizedOutput(text);
+          const optimizedText = rawOpt.replace(SCORE_PATTERN, '').trim();
+          const promptScore = parsePromptScore(text);
+
+          if (sessionId) {
+            const supabase = getSupabaseClient();
+            if (supabase) {
+              void supabase.from('optimization_logs').insert({
+                session_id: sessionId,
+                mode: dbMode,
+                version: 'v1',
+                provider: 'gemini',
+                model: modelId,
+                prompt_length: promptRaw.length,
+                optimized_length: optimizedText.length,
+                explanation_length: explanation.length + changes.length,
+                ...(promptScore != null ? { prompt_score: promptScore } : {}),
+              });
+            }
+          }
+        } catch (logErr) {
+          console.error('[api/optimize] onFinish logging error:', logErr);
+        }
+      },
     });
 
-    const idx = text.indexOf(DELIMITER);
-    const optimizedText =
-      idx >= 0 ? text.slice(0, idx).trim() : text.trim();
-    const explanation =
-      idx >= 0 ? text.slice(idx + DELIMITER.length).trim() : "";
-
-    return NextResponse.json({
-      optimizedText,
-      explanation,
-      mode: mode ?? "better",
-    });
+    return result.toTextStreamResponse();
   } catch (err) {
-    const message = err instanceof Error ? err.message : "Optimization failed";
-    return NextResponse.json({ error: message }, { status: 500 });
+    console.error('[api/optimize]', err);
+    const message = err instanceof Error ? err.message : 'Optimization failed';
+    return Response.json({ error: message }, { status: 500 });
   }
 }

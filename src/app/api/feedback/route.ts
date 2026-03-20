@@ -1,11 +1,12 @@
+import { normalizeModeForDb } from '@/lib/optimization-logs';
 import { getSupabaseClient } from '@/lib/supabase';
 
 export const runtime = 'nodejs';
 
 function isMissingColumnError(message: string): boolean {
-  // PostgREST schema cache message for unknown columns, e.g.:
-  // "Could not find the 'feedback' column of 'optimization_logs' in the schema cache"
-  return /Could not find the '.*' column of 'optimization_logs' in the schema cache/i.test(message);
+  return /Could not find the '.*' column of 'optimization_logs' in the schema cache/i.test(
+    message,
+  );
 }
 
 export async function POST(req: Request) {
@@ -36,37 +37,90 @@ export async function POST(req: Request) {
   if (!feedback || typeof feedback !== 'string') {
     return Response.json({ error: 'feedback is required' }, { status: 400 });
   }
+  if (!sessionId || typeof sessionId !== 'string' || !sessionId.trim()) {
+    return Response.json({ error: 'sessionId is required' }, { status: 400 });
+  }
 
-  // Normalize mode to match Supabase check constraint.
-  // Note: 'cot' seems to trigger a check constraint violation in the DB, so we map it to 'better' for logging purposes.
-  const ALLOWED_MODES = ['better', 'specific'] as const;
-  const normalizedMode = ALLOWED_MODES.includes(mode.toLowerCase() as (typeof ALLOWED_MODES)[number])
-    ? (mode.toLowerCase() as (typeof ALLOWED_MODES)[number])
-    : 'better';
+  const sid = sessionId.trim();
+  const normalizedMode = normalizeModeForDb(mode);
+  const prov = typeof provider === 'string' && provider.trim() ? provider.trim() : 'gemini';
+  const pl = typeof inputLength === 'number' && !Number.isNaN(inputLength) ? inputLength : 0;
+  const ol = typeof outputLength === 'number' && !Number.isNaN(outputLength) ? outputLength : 0;
 
-  const primary = await supabase.from('optimization_logs').insert({
-    mode: normalizedMode,
-    provider,
-    input_length: inputLength,
-    output_length: outputLength,
+  const updatePayload = {
     feedback,
-    session_id: sessionId,
-  });
+    mode: normalizedMode,
+    provider: prov,
+    model: prov,
+    prompt_length: pl,
+    optimized_length: ol,
+  };
 
-  if (primary.error) {
-    // Backward-compatible fallback if the table schema is still the older shape.
-    if (isMissingColumnError(primary.error.message)) {
+  const updated = await supabase
+    .from('optimization_logs')
+    .update(updatePayload)
+    .eq('session_id', sid)
+    .select('id');
+
+  if (updated.error) {
+    if (isMissingColumnError(updated.error.message)) {
+      // Use `feedback` text only — integer rating 1/-1 often violates
+      // optimization_logs_rating_check (e.g. 1–5 star scales forbid -1).
+      const fb = feedback === 'up' ? 'up' : 'down';
+      const narrow = await supabase
+        .from('optimization_logs')
+        .update({ feedback: fb })
+        .eq('session_id', sid)
+        .select('id');
+      if (!narrow.error && narrow.data && narrow.data.length > 0) {
+        return Response.json({ success: true, updated: true });
+      }
       const legacy = await supabase.from('optimization_logs').insert({
-        session_id: sessionId,
+        session_id: sid,
         mode: normalizedMode,
-        provider,
-        prompt_length: inputLength,
-        rating: feedback === 'up' ? 1 : -1,
+        provider: prov,
+        model: prov,
+        feedback: fb,
       });
       if (legacy.error) return Response.json({ error: legacy.error.message }, { status: 500 });
       return Response.json({ success: true, legacy: true });
     }
-    return Response.json({ error: primary.error.message }, { status: 500 });
+    return Response.json({ error: updated.error.message }, { status: 500 });
   }
-  return Response.json({ success: true });
+
+  if (updated.data && updated.data.length > 0) {
+    return Response.json({ success: true, updated: true });
+  }
+
+  const insertRow = {
+    session_id: sid,
+    mode: normalizedMode,
+    version: 'v1' as const,
+    provider: prov,
+    model: prov,
+    prompt_length: pl,
+    optimized_length: ol,
+    explanation_length: 0,
+    feedback,
+  };
+
+  const inserted = await supabase.from('optimization_logs').insert(insertRow);
+
+  if (inserted.error) {
+    if (isMissingColumnError(inserted.error.message)) {
+      const fb = feedback === 'up' ? 'up' : 'down';
+      const legacy = await supabase.from('optimization_logs').insert({
+        session_id: sid,
+        mode: normalizedMode,
+        provider: prov,
+        model: prov,
+        feedback: fb,
+      });
+      if (legacy.error) return Response.json({ error: legacy.error.message }, { status: 500 });
+      return Response.json({ success: true, legacy: true });
+    }
+    return Response.json({ error: inserted.error.message }, { status: 500 });
+  }
+
+  return Response.json({ success: true, inserted: true });
 }

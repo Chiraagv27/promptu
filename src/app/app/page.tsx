@@ -4,7 +4,6 @@ import { useCompletion } from '@ai-sdk/react';
 import { useCallback, useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { Settings } from 'lucide-react';
 import { PromptInput } from '@/components/PromptInput';
 import { AppModeSelector } from '@/components/AppModeSelector';
 import { StreamingPromptOutput } from '@/components/StreamingPromptOutput';
@@ -13,8 +12,6 @@ import { FeedbackButtons } from '@/components/FeedbackButtons';
 import { StatsBar } from '@/components/StatsBar';
 import { AppSettingsPanel } from '@/components/AppSettingsPanel';
 import type { OptimizationMode, Provider } from '@/lib/types';
-
-const GUEST_ID_KEY = 'pp_guest_id';
 
 const STORAGE_KEY = 'promptperfect:apikey';
 const EXPLANATION_DELIMITER = '---EXPLANATION---';
@@ -73,10 +70,8 @@ export default function AppPage() {
   } | null>(null);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [statsRefresh, setStatsRefresh] = useState(0);
-  const [, setGuestId] = useState<string>('');
   const [hydrated, setHydrated] = useState(false);
 
-  // Sync response state (for BYOK)
   const [syncCompletion, setSyncCompletion] = useState('');
   const [syncLoading, setSyncLoading] = useState(false);
   const [syncError, setSyncError] = useState<string | null>(null);
@@ -87,58 +82,35 @@ export default function AppPage() {
 
   useEffect(() => {
     if (!mounted) return;
-    let cancelled = false;
     const id = setTimeout(() => {
-      if (cancelled) return;
       try {
         const raw = localStorage.getItem('pp_user');
-        if (raw) {
-          const u = JSON.parse(raw) as PPUser;
-          setUser(u);
-          setProvider((u.provider as Provider) || 'gemini');
-          setApiKey(loadApiKey((u.provider as Provider) || 'gemini'));
-        } else {
-          let gid = localStorage.getItem(GUEST_ID_KEY);
-          if (!gid) {
-            gid = generateSessionId();
-            localStorage.setItem(GUEST_ID_KEY, gid);
-          }
-          setGuestId(gid);
+        if (!raw) {
+          router.replace('/login');
+          return;
         }
+        const u = JSON.parse(raw) as PPUser;
+        setUser(u);
+        setProvider((u.provider as Provider) || 'gemini');
+        setApiKey(loadApiKey((u.provider as Provider) || 'gemini'));
         setHydrated(true);
       } catch {
-        let gid = localStorage.getItem(GUEST_ID_KEY);
-        if (!gid) {
-          gid = generateSessionId();
-          localStorage.setItem(GUEST_ID_KEY, gid);
-        }
-        setGuestId(gid);
-        setHydrated(true);
+        router.replace('/login');
       }
     }, 0);
-    return () => {
-      cancelled = true;
-      clearTimeout(id);
-    };
+    return () => clearTimeout(id);
   }, [mounted, router]);
 
   useEffect(() => {
     setApiKey(loadApiKey(provider));
   }, [provider]);
 
-  const saveScore = useCallback(async (sid: string, score: number) => {
-    try {
-      await fetch('/api/session-score', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ session_id: sid, score }),
-      });
-    } catch {
-      // ignore
-    }
+  useEffect(() => {
+    const open = () => setSettingsOpen(true);
+    document.addEventListener('open-settings', open);
+    return () => document.removeEventListener('open-settings', open);
   }, []);
 
-  // Only send apiKey when non-empty (api_key default is '' in DB)
   const hasApiKey = typeof apiKey === 'string' && apiKey.trim() !== '';
 
   const {
@@ -152,16 +124,20 @@ export default function AppPage() {
     body: {
       mode: selectedMode,
       provider,
-      apiKey: provider !== 'gemini' && hasApiKey ? apiKey : undefined,
     },
+    onFinish: () => setStatsRefresh((n) => n + 1),
     fetch: async (input, init) => {
       const res = await fetch(input, init);
       if (!res.ok) {
         let msg = `Request failed: ${res.status}`;
         try {
           const text = await res.text();
-          const data = text ? (JSON.parse(text) as { error?: string }) : {};
+          const data = text
+            ? (JSON.parse(text) as { error?: string; message?: string })
+            : {};
           if (typeof data?.error === 'string' && data.error.trim()) msg = data.error.trim();
+          else if (typeof data?.message === 'string' && data.message.trim())
+            msg = data.message.trim();
         } catch {
           // keep default msg
         }
@@ -174,7 +150,7 @@ export default function AppPage() {
   const isGemini = provider === 'gemini';
   const completion = isGemini ? streamCompletion : syncCompletion;
   const isLoading = isGemini ? streamLoading : syncLoading;
-  const error = isGemini ? streamError : (syncError ? new Error(syncError) : null);
+  const error = isGemini ? streamError : syncError ? new Error(syncError) : null;
 
   const handleOptimize = useCallback(() => {
     if (!inputText.trim()) return;
@@ -184,42 +160,66 @@ export default function AppPage() {
     setSessionId(sid);
     setRunMeta({ mode: selectedMode, provider, inputLength: trimmed.length });
 
+    const coreBody = {
+      text: trimmed,
+      prompt: trimmed,
+      mode: selectedMode,
+      provider,
+      session_id: sid,
+    };
+
     if (isGemini) {
-      complete(trimmed, {
+      void complete(trimmed, {
         body: {
-          mode: selectedMode,
-          provider,
+          ...coreBody,
           apiKey: undefined,
-          session_id: sid,
         },
       });
     } else {
       setSyncError(null);
       setSyncLoading(true);
       setSyncCompletion('');
+      const headers: Record<string, string> = {
+        'Content-Type': 'application/json',
+      };
+      if (hasApiKey) {
+        headers.Authorization = `Bearer ${apiKey.trim()}`;
+      }
       fetch('/api/optimize-sync', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers,
         body: JSON.stringify({
-          prompt: trimmed,
-          mode: selectedMode,
-          provider,
-          ...(hasApiKey && { apiKey: apiKey.trim() }),
-          session_id: sid,
+          ...coreBody,
+          ...(hasApiKey ? { apiKey: apiKey.trim() } : {}),
         }),
       })
-        .then((res) => res.json())
-        .then((data) => {
+        .then(async (res) => {
+          const data = await res.json().catch(() => ({}));
           if (data.error) throw new Error(data.error);
-          const { optimizedText, explanation: expl, changes } = data;
+          return data as {
+            optimizedText?: string;
+            explanation?: string;
+            changes?: string;
+            rawText?: string;
+          };
+        })
+        .then((data) => {
+          const { optimizedText, explanation: expl, changes, rawText } = data;
+          const raw = typeof rawText === 'string' ? rawText : '';
+          const scoreMatch = raw.match(SCORE_PATTERN);
+          const scorePrefix = scoreMatch ? `${scoreMatch[0]}\n` : '';
           const full =
-            optimizedText +
+            scorePrefix +
+            (optimizedText ?? '') +
             (expl ? `\n${EXPLANATION_DELIMITER}\n${expl}` : '') +
             (changes ? `\n${CHANGES_DELIMITER}\n${changes}` : '');
           setSyncCompletion(full);
           setExplanation(expl || '');
+          setStatsRefresh((n) => n + 1);
         })
-        .catch((err) => setSyncError(err instanceof Error ? err.message : 'Request failed'))
+        .catch((err) =>
+          setSyncError(err instanceof Error ? err.message : 'Request failed'),
+        )
         .finally(() => setSyncLoading(false));
     }
   }, [inputText, selectedMode, provider, apiKey, hasApiKey, isGemini, complete]);
@@ -229,95 +229,67 @@ export default function AppPage() {
     router.replace('/');
   };
 
-  if (!mounted || !hydrated) {
+  if (!mounted || !hydrated || !user) {
     return (
-      <div className="flex min-h-screen items-center justify-center bg-[#050505]">
+      <div className="flex h-screen items-center justify-center bg-[#050505]">
         <div className="text-[#ECECEC]">Loading…</div>
       </div>
     );
   }
 
   return (
-    <div className="flex min-h-screen flex-col bg-zinc-50 dark:bg-[#050505]">
-      <header className="flex items-center justify-between border-b border-zinc-200 bg-white px-4 py-3 dark:border-zinc-800 dark:bg-zinc-900">
-        <Link href="/" className="text-xl font-bold text-zinc-900 dark:text-[#ECECEC]">
-          PromptPerfect by Beagle
+    <div className="flex min-h-screen w-full max-w-[100vw] flex-col bg-[#050505] font-sans">
+      <header className="flex h-14 shrink-0 items-center justify-between border-b border-[#1a1a1a] px-6">
+        <Link href="/" className="flex items-baseline gap-2">
+          <span className="text-lg font-bold text-[#ECECEC]">PromptPerfect</span>
+          <span className="text-sm text-[#666]">by Beagle</span>
         </Link>
-        <div className="flex items-center gap-3">
-          {user ? (
-            <>
-              <span className="text-sm text-zinc-600 dark:text-zinc-400">
-                Hi, {user.name || user.email}
-              </span>
-              <button
-                type="button"
-                onClick={() => setSettingsOpen(true)}
-                className="cursor-pointer rounded-lg p-2 text-zinc-500 transition hover:bg-zinc-100 hover:text-zinc-700 dark:hover:bg-zinc-800 dark:hover:text-zinc-300"
-                aria-label="Settings"
-              >
-                <Settings className="h-5 w-5" />
-              </button>
-              <button
-                type="button"
-                onClick={handleLogout}
-                className="cursor-pointer rounded-lg border border-zinc-600 px-3 py-1.5 text-sm text-zinc-600 hover:bg-zinc-100 dark:border-zinc-600 dark:text-zinc-400 dark:hover:bg-zinc-800"
-              >
-                Log out
-              </button>
-            </>
-          ) : (
-            <>
-              <Link
-                href="/login"
-                className="rounded-lg border border-[#4552FF] px-4 py-2 text-sm font-medium text-[#4552FF] hover:bg-[#4552FF]/10"
-              >
-                Log In
-              </Link>
-              <Link
-                href="/signup"
-                className="rounded-lg bg-[#4552FF] px-4 py-2 text-sm font-medium text-white hover:opacity-90"
-              >
-                Sign Up
-              </Link>
-            </>
-          )}
+        <div className="flex items-center gap-2 sm:gap-3">
+          <span className="hidden text-sm text-[#888] sm:inline">
+            Hi, {user.name || user.email}
+          </span>
+          <button
+            type="button"
+            onClick={() => setSettingsOpen(true)}
+            className="rounded-lg border border-transparent px-3 py-1.5 text-sm text-[#888] transition-all duration-200 ease-out hover:border-[#2a2a2a] hover:bg-[#111] hover:text-[#ECECEC]"
+            aria-label="Settings"
+          >
+            ⚙️ Settings
+          </button>
+          <button
+            type="button"
+            onClick={handleLogout}
+            className="rounded-lg border border-transparent px-3 py-1.5 text-sm text-[#888] transition-all duration-200 ease-out hover:border-[#2a2a2a] hover:bg-[#111] hover:text-[#ECECEC]"
+          >
+            Log out
+          </button>
         </div>
       </header>
 
-      <main className="flex-1 p-4 md:p-6">
-        <div id="optimizer" className="mx-auto max-w-6xl space-y-6">
-          <div className="rounded-xl border border-zinc-200 bg-white p-2 shadow-sm dark:border-zinc-800 dark:bg-zinc-900">
-            <StatsBar refreshTrigger={statsRefresh} />
+      <main className="flex min-h-0 w-full flex-1 flex-col overflow-y-auto overflow-x-hidden overscroll-y-contain">
+        <div className="shrink-0 px-6 pt-5">
+          <StatsBar refreshTrigger={statsRefresh} />
+        </div>
+
+        {/* Two-column textarea section: row on large screens, normal flow, no overlap */}
+        <div className="flex w-full flex-col gap-5 px-6 pb-0 pt-6 lg:flex-row lg:items-start">
+          <div className="min-w-0 flex-1">
+            <PromptInput
+              variant="optimizer"
+              value={inputText}
+              onChange={setInputText}
+              disabled={isLoading}
+            />
           </div>
 
-          <div className="grid gap-6 lg:grid-cols-2">
-            <div className="flex flex-col gap-4">
-              <h2 className="text-sm font-medium text-zinc-700 dark:text-zinc-300">
-                Your prompt
-              </h2>
-              <PromptInput
-                value={inputText}
-                onChange={setInputText}
-                disabled={isLoading}
-              />
-            </div>
-
-            <div className="flex flex-col gap-4">
-              <h2 className="text-sm font-medium text-zinc-700 dark:text-zinc-300">
-                Optimized prompt
-              </h2>
-              <StreamingPromptOutput
-                text={completion}
-                isStreaming={isLoading}
-                onExplanation={setExplanation}
-                onScore={
-                  sessionId
-                    ? (score) => saveScore(sessionId, score)
-                    : undefined
-                }
-              />
-              {completion && !isLoading && (
-                <div className="flex justify-end">
+          <div className="min-w-0 flex-1">
+            <StreamingPromptOutput
+              variant="optimizer"
+              text={completion}
+              isStreaming={isLoading}
+              onExplanation={setExplanation}
+              afterTextarea={
+                completion && !isLoading ? (
                   <FeedbackButtons
                     sessionId={sessionId}
                     mode={runMeta?.mode ?? selectedMode}
@@ -327,51 +299,56 @@ export default function AppPage() {
                     disabled={false}
                     onSubmitted={() => setStatsRefresh((n) => n + 1)}
                   />
-                </div>
-              )}
-            </div>
+                ) : null
+              }
+            />
           </div>
+        </div>
 
-          <div className="flex flex-col items-center gap-4">
+        {/* Mode + Optimize — below textareas, stacked */}
+        <div className="shrink-0 px-6 py-5">
+          <span className="mb-3 block text-[11px] font-medium uppercase tracking-[0.08em] text-[#666]">
+            Mode
+          </span>
+          <div className="flex w-full justify-center">
             <AppModeSelector
+              variant="optimizer"
               value={selectedMode}
               onChange={setSelectedMode}
               disabled={isLoading}
             />
-            <button
-              type="button"
-              onClick={handleOptimize}
-              disabled={!inputText.trim() || isLoading}
-              className="cursor-pointer rounded-lg bg-[#4552FF] px-6 py-2.5 text-sm font-semibold text-white transition hover:opacity-90 disabled:opacity-50"
-            >
-              {isLoading ? 'Optimizing…' : 'Optimize'}
-            </button>
           </div>
+          <button
+            type="button"
+            onClick={handleOptimize}
+            disabled={!inputText.trim() || isLoading}
+            className="mx-auto mt-3 flex h-12 w-full max-w-[300px] cursor-pointer items-center justify-center rounded-[12px] border-none bg-[linear-gradient(135deg,#4552FF,#5c6aff)] text-[15px] font-semibold text-white transition-opacity duration-200 ease-out hover:opacity-95 disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            {isLoading ? 'Optimizing…' : 'Optimize'}
+          </button>
+        </div>
 
-          {error && (
-            <p className="mt-4 text-center text-sm text-red-600 dark:text-red-400">
-              {error.message}
-            </p>
-          )}
+        {error && (
+          <p className="shrink-0 px-6 pb-2 text-center text-sm text-red-400">
+            {error.message}
+          </p>
+        )}
 
-          <div className="mt-6 space-y-4">
-            <ExplanationPanel explanation={explanation} />
-          </div>
+        <div className="mt-2 w-full shrink-0 px-6 pb-8">
+          <ExplanationPanel explanation={explanation} />
         </div>
       </main>
 
-      {user && (
-        <AppSettingsPanel
-          open={settingsOpen}
-          onClose={() => setSettingsOpen(false)}
-          userId={user.id}
-          provider={provider}
-          onProviderChange={setProvider}
-          apiKey={apiKey}
-          onApiKeyChange={setApiKey}
-          onSaveSuccess={() => setStatsRefresh((n) => n + 1)}
-        />
-      )}
+      <AppSettingsPanel
+        open={settingsOpen}
+        onClose={() => setSettingsOpen(false)}
+        userId={user.id}
+        provider={provider}
+        onProviderChange={setProvider}
+        apiKey={apiKey}
+        onApiKeyChange={setApiKey}
+        onSaveSuccess={() => setStatsRefresh((n) => n + 1)}
+      />
     </div>
   );
 }

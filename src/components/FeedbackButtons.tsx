@@ -73,28 +73,24 @@ export function FeedbackButtons({
           onClick={() => sendFeedback('up')}
           disabled={isDisabled}
           aria-label="Thumbs up"
-          className="inline-flex items-center justify-center rounded-md border border-zinc-200 bg-white p-2 text-zinc-700 transition hover:bg-zinc-50 disabled:opacity-50 dark:border-zinc-600 dark:bg-zinc-800 dark:text-zinc-300 dark:hover:bg-zinc-700"
+          className="inline-flex items-center justify-center rounded-md border border-transparent bg-transparent p-1 text-[#555] transition-colors duration-200 ease-out hover:text-[#22c55e] disabled:opacity-50"
         >
-          <ThumbsUp className="h-4 w-4" />
+          <ThumbsUp className="h-[18px] w-[18px]" strokeWidth={2} />
         </button>
         <button
           type="button"
           onClick={() => sendFeedback('down')}
           disabled={isDisabled}
           aria-label="Thumbs down"
-          className="inline-flex items-center justify-center rounded-md border border-zinc-200 bg-white p-2 text-zinc-700 transition hover:bg-zinc-50 disabled:opacity-50 dark:border-zinc-600 dark:bg-zinc-800 dark:text-zinc-300 dark:hover:bg-zinc-700"
+          className="inline-flex items-center justify-center rounded-md border border-transparent bg-transparent p-1 text-[#555] transition-colors duration-200 ease-out hover:text-[#ef4444] disabled:opacity-50"
         >
-          <ThumbsDown className="h-4 w-4" />
+          <ThumbsDown className="h-[18px] w-[18px]" strokeWidth={2} />
         </button>
         {submitted && (
-          <span className="text-sm text-green-600 dark:text-green-400">
-            Thanks for your feedback!
-          </span>
+          <span className="text-sm text-green-500/90">Thanks for your feedback!</span>
         )}
       </div>
-      {error && (
-        <p className="text-sm text-red-600 dark:text-red-400">{error}</p>
-      )}
+      {error && <p className="text-sm text-red-400">{error}</p>}
     </div>
   );
 }

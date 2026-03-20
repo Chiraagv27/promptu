@@ -1,27 +1,68 @@
-export type OptimizeMode = "better" | "shorter" | "longer";
+/**
+ * System prompts for `/api/optimize` and `/api/optimize-sync`.
+ * Output must stay aligned with `splitOptimizedOutput` in `@/lib/delimiter`.
+ */
 
-const BETTER =
-  "You are a prompt optimization expert. Improve the user's prompt for clarity, specificity, and effectiveness. Keep the same intent. Output ONLY the improved prompt, then on a new line write exactly ---EXPLANATION--- and then a short explanation of what you changed and why.";
+/** Shared structure so the UI can split optimized text, explanation, and changes reliably. */
+export const OUTPUT_FORMAT = `
 
-const SHORTER =
-  "You are a prompt optimization expert. Make the user's prompt shorter and more concise without losing the core intent. Output ONLY the shortened prompt, then on a new line write exactly ---EXPLANATION--- and then a short explanation of what you removed or condensed.";
+STRICT OUTPUT STRUCTURE (the app splits on these exact delimiter lines):
 
-const LONGER =
-  "You are a prompt optimization expert. Expand the user's prompt with more detail, examples, or structure while keeping the same intent. Output ONLY the expanded prompt, then on a new line write exactly ---EXPLANATION--- and then a short explanation of what you added and why.";
+(A) Optional first line only: ---SCORE---NN--- where NN is an integer 1–100 (quality of the final prompt). Include when possible.
 
-export const SYSTEM_PROMPTS: Record<OptimizeMode, string> = {
+(B) Then the full optimized prompt only: plain text, ready to paste into an LLM. No title line like "Optimized prompt:". Do not include ---EXPLANATION--- or ---CHANGES--- inside this block.
+
+(C) Then one line exactly: ---EXPLANATION---
+
+(D) Then 2–5 lines. Each line must begin with a hyphen and a space, like this example: "- Clarified the goal so …"
+
+(E) Then one line exactly: ---CHANGES---
+
+(F) Then 2–6 lines. Each line must begin with "- " and state one concrete edit compared to the user's original (added, removed, or rephrased).
+
+Use clear, professional wording.`;
+
+const BETTER = `You are an expert prompt engineer. Improve the user's prompt for clarity, specificity, and effectiveness while preserving intent.${OUTPUT_FORMAT}`;
+
+const SPECIFIC = `You are an expert prompt engineer. Rewrite the user's prompt to be highly specific: add audience, constraints, desired format, success criteria, edge cases, and measurable outcomes where it helps. Keep the same overall goal.${OUTPUT_FORMAT}`;
+
+const COT = `You are an expert prompt engineer. Rewrite the user's prompt so the target model is guided to use explicit chain-of-thought: e.g. step-by-step reasoning, show intermediate reasoning, verify before the final answer, or "think through X before Y"—without unnecessary verbosity.${OUTPUT_FORMAT}`;
+
+const SHORTER = `You are an expert prompt engineer. Make the user's prompt shorter and more concise without losing core intent or critical constraints.${OUTPUT_FORMAT}`;
+
+const LONGER = `You are an expert prompt engineer. Expand the user's prompt with useful detail, examples, or structure while keeping the same intent.${OUTPUT_FORMAT}`;
+
+const DEVELOPER = `You are an expert prompt engineer for software tasks. Tailor the prompt for developers: stack/context, inputs/outputs, error handling, testing or review criteria, and code style when relevant.${OUTPUT_FORMAT}`;
+
+const RESEARCH = `You are an expert prompt engineer for research tasks. Emphasize sources, methodology, scope, how to handle uncertainty, and how to structure the answer (e.g. summary vs. deep dive).${OUTPUT_FORMAT}`;
+
+const BEGINNER = `You are an expert prompt engineer. Rewrite the prompt so it is easy to follow for a beginner: plain language, define jargon when needed, and break complex asks into ordered steps.${OUTPUT_FORMAT}`;
+
+const PRODUCT = `You are an expert prompt engineer for product work. Frame the prompt with user problem, context, constraints, success metrics, and desired output shape (e.g. bullets, user stories, acceptance criteria).${OUTPUT_FORMAT}`;
+
+const MARKETING = `You are an expert prompt engineer for marketing. Clarify audience, channel, tone, brand constraints, CTA, and what "good" looks like for the deliverable.${OUTPUT_FORMAT}`;
+
+/** Legacy + app modes; keys must match \`OptimizationMode\` where used. */
+export const SYSTEM_PROMPTS: Record<string, string> = {
   better: BETTER,
   shorter: SHORTER,
   longer: LONGER,
+  specific: SPECIFIC,
+  cot: COT,
+  developer: DEVELOPER,
+  research: RESEARCH,
+  beginner: BEGINNER,
+  product: PRODUCT,
+  marketing: MARKETING,
 };
 
+/** @deprecated Use \`SYSTEM_PROMPTS\` keys; kept for older imports. */
+export type OptimizeMode = 'better' | 'shorter' | 'longer';
+
 /**
- * Supports legacy modes (better/shorter/longer) and app modes from `@/lib/types`
- * (specific, cot, …). Unknown modes fall back to the "better" prompt.
+ * Returns the system prompt for the given mode. Unknown modes fall back to "better".
  */
 export function getSystemPrompt(mode: string): string {
-  if (mode in SYSTEM_PROMPTS) {
-    return SYSTEM_PROMPTS[mode as OptimizeMode];
-  }
-  return SYSTEM_PROMPTS.better;
+  const key = typeof mode === 'string' ? mode.toLowerCase() : 'better';
+  return SYSTEM_PROMPTS[key] ?? SYSTEM_PROMPTS.better;
 }
