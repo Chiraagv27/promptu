@@ -14,22 +14,31 @@ export async function GET() {
   }
 
   try {
-    const { data: logs, error } = await supabase
-      .from('optimization_logs')
-      .select('*');
+    const { data: logs, error } = await supabase.from('optimization_logs').select('*');
 
     if (error) {
       console.error('[Stats API] Error fetching logs:', error);
       return Response.json({ error: error.message }, { status: 500 });
     }
 
-    const total = logs?.length ?? 0;
-    const thumbsUp =
-      logs?.filter((r) => r.feedback === 'up' || r.rating === 1).length ?? 0;
-    const thumbsDown =
-      logs?.filter((r) => r.feedback === 'down' || r.rating === -1).length ?? 0;
-    const avgScore = null;
-    const byMode = (logs ?? []).reduce(
+    const rows = logs ?? [];
+    const total = rows.length;
+    const thumbsUp = rows.filter((r) => r.feedback === 'up' || r.rating === 1).length;
+    const thumbsDown = rows.filter((r) => r.feedback === 'down' || r.rating === -1).length;
+
+    const scored = rows.filter(
+      (r) =>
+        typeof r.prompt_score === 'number' &&
+        !Number.isNaN(r.prompt_score as number),
+    ) as { prompt_score: number }[];
+    const avgScore =
+      scored.length > 0
+        ? Math.round(
+            scored.reduce((acc, r) => acc + r.prompt_score, 0) / scored.length,
+          )
+        : null;
+
+    const byMode = rows.reduce(
       (acc, r) => {
         const m = r.mode ?? 'unknown';
         acc[m] = (acc[m] ?? 0) + 1;
@@ -37,7 +46,7 @@ export async function GET() {
       },
       {} as Record<string, number>,
     );
-    const byProvider = (logs ?? []).reduce(
+    const byProvider = rows.reduce(
       (acc, r) => {
         const p = r.provider ?? 'unknown';
         acc[p] = (acc[p] ?? 0) + 1;

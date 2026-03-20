@@ -1,6 +1,6 @@
 'use client';
 
-import { BarChart3, ThumbsDown, ThumbsUp } from 'lucide-react';
+import { ThumbsDown, ThumbsUp } from 'lucide-react';
 import { useEffect, useState } from 'react';
 
 interface Stats {
@@ -49,11 +49,8 @@ export function StatsBar({ refreshTrigger = 0 }: StatsBarProps) {
 
   if (loading) {
     return (
-      <div className="flex items-center gap-4 rounded-lg bg-white px-4 py-3 dark:bg-zinc-900">
-        <div className="flex items-center gap-2 text-sm font-medium text-zinc-400 dark:text-zinc-500">
-          <BarChart3 className="h-4 w-4 animate-pulse" />
-          Loading analytics…
-        </div>
+      <div className="rounded-[10px] border border-[#1a1a1a] bg-[#0a0a0a] px-4 py-2.5 text-[13px]">
+        <span className="text-[#555]">Loading analytics…</span>
       </div>
     );
   }
@@ -67,73 +64,66 @@ export function StatsBar({ refreshTrigger = 0 }: StatsBarProps) {
       ? Math.round((thumbsUp / (thumbsUp + thumbsDown)) * 100)
       : null;
 
+  const modeParts = Object.entries(stats.byMode ?? {}).filter(([, c]) => c > 0);
+
+  const Divider = () => (
+    <span className="mx-2 shrink-0 text-[#2a2a2a]" aria-hidden>
+      |
+    </span>
+  );
+
   return (
-    <div className="flex flex-wrap items-center gap-4 rounded-lg bg-white px-4 py-3 dark:bg-zinc-900">
-      <div className="flex items-center gap-2 text-sm font-medium text-zinc-700 dark:text-zinc-300">
-        <BarChart3 className="h-4 w-4" />
-        Analytics
-      </div>
-      <div className="flex items-center gap-6 text-sm">
-        <span className="text-zinc-600 dark:text-zinc-400">
-          Total: <strong>{stats.total ?? 0}</strong>
-        </span>
-        <span className="flex items-center gap-1 text-green-600 dark:text-green-400">
-          <ThumbsUp className="h-4 w-4" />
-          <strong>{thumbsUp}</strong>
-        </span>
-        <span className="flex items-center gap-1 text-red-600 dark:text-red-400">
-          <ThumbsDown className="h-4 w-4" />
-          <strong>{thumbsDown}</strong>
-        </span>
-        {satisfaction !== null && (
-          <span className="text-zinc-600 dark:text-zinc-400">
-            Satisfaction: <strong>{satisfaction}%</strong>
+    <div
+      className="flex min-h-[40px] flex-wrap items-center rounded-[10px] border border-[#1a1a1a] bg-[#0a0a0a] px-4 py-2.5 text-[13px] transition-colors duration-200 ease-out"
+      role="region"
+      aria-label="Analytics"
+    >
+      <span className="text-[#555]">Total</span>
+      <span className="ml-1.5 font-medium tabular-nums text-white">
+        {stats.total ?? 0}
+      </span>
+      <Divider />
+      <span className="inline-flex items-center gap-1 text-[#555]">
+        <ThumbsUp className="h-3.5 w-3.5 text-[#555]" aria-hidden />
+        <span className="tabular-nums text-white">{thumbsUp}</span>
+      </span>
+      <Divider />
+      <span className="inline-flex items-center gap-1 text-[#555]">
+        <ThumbsDown className="h-3.5 w-3.5 text-[#555]" aria-hidden />
+        <span className="tabular-nums text-white">{thumbsDown}</span>
+      </span>
+      {satisfaction !== null && (
+        <>
+          <Divider />
+          <span className="text-[#555]">Satisfaction</span>
+          <span className="ml-1.5 font-medium tabular-nums text-white">
+            {satisfaction}%
           </span>
-        )}
-        {typeof stats.avgScore === 'number' && (
-          <span className="flex items-center gap-2">
-            <div className="relative h-6 w-6 shrink-0">
-              <svg className="h-6 w-6 -rotate-90" viewBox="0 0 36 36">
-                <circle
-                  cx="18"
-                  cy="18"
-                  r="14"
-                  fill="none"
-                  strokeWidth="3"
-                  className="stroke-zinc-200 dark:stroke-zinc-700"
-                />
-                <circle
-                  cx="18"
-                  cy="18"
-                  r="14"
-                  fill="none"
-                  strokeWidth="3"
-                  strokeDasharray={`${(stats.avgScore / 100) * 88} 88`}
-                  strokeLinecap="round"
-                  className="stroke-amber-500 dark:stroke-amber-400"
-                />
-              </svg>
-              <span className="absolute inset-0 flex items-center justify-center text-[8px] font-bold tabular-nums text-zinc-700 dark:text-zinc-300">
-                {stats.avgScore}
+        </>
+      )}
+      {typeof stats.avgScore === 'number' && (
+        <>
+          <Divider />
+          <span className="text-[#555]">Avg score</span>
+          <span className="ml-1.5 font-medium tabular-nums text-white">
+            {stats.avgScore}
+          </span>
+        </>
+      )}
+      {modeParts.length > 0 && (
+        <>
+          <Divider />
+          <span className="text-[#555]">Modes</span>
+          <span className="ml-1.5 text-white">
+            {modeParts.map(([mode, count], i) => (
+              <span key={mode}>
+                {i > 0 ? <span className="text-[#444]"> · </span> : null}
+                <span className="text-[#555]">{mode}</span>
+                <span className="ml-0.5 tabular-nums text-white">{count}</span>
               </span>
-            </div>
-            <span className="text-sm text-zinc-600 dark:text-zinc-400">
-              Avg score
-            </span>
+            ))}
           </span>
-        )}
-      </div>
-      {Object.keys(stats.byMode ?? {}).length > 0 && (
-        <div className="flex gap-2 text-xs">
-          {Object.entries(stats.byMode ?? {}).map(([mode, count]) => (
-            <span
-              key={mode}
-              className="rounded-full bg-zinc-100 px-2 py-0.5 dark:bg-zinc-800"
-            >
-              {mode}: {count}
-            </span>
-          ))}
-        </div>
+        </>
       )}
     </div>
   );

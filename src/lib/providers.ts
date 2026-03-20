@@ -4,7 +4,9 @@ import { createOpenAI } from "@ai-sdk/openai";
 import type { LanguageModelV3 } from "@ai-sdk/provider";
 import type { Provider } from "@/lib/types";
 
-const GEMINI_MODEL = "gemini-2.0-flash";
+/** Set `GEMINI_MODEL` in `.env` if the default is unavailable (e.g. `gemini-2.5-flash`). */
+const GEMINI_MODEL =
+  process.env.GEMINI_MODEL?.trim() || "gemini-2.0-flash";
 const OPENAI_MODEL = "gpt-4o-mini";
 const ANTHROPIC_MODEL = "claude-3-5-haiku-latest";
 
@@ -17,7 +19,9 @@ export function hasServerKey(provider: Provider): boolean {
   switch (provider) {
     case "gemini":
       return Boolean(
-        process.env.GOOGLE_GENERATIVE_AI_API_KEY ?? process.env.GEMINI_API_KEY
+        process.env.GOOGLE_GENERATIVE_AI_API_KEY ??
+          process.env.GEMINI_API_KEY ??
+          process.env.GOOGLE_API_KEY
       );
     case "openai":
       return Boolean(process.env.OPENAI_API_KEY);
@@ -37,10 +41,11 @@ export function createProvider(
       const key =
         apiKey ??
         process.env.GOOGLE_GENERATIVE_AI_API_KEY ??
-        process.env.GEMINI_API_KEY;
+        process.env.GEMINI_API_KEY ??
+        process.env.GOOGLE_API_KEY;
       if (!key) {
         throw new Error(
-          "Missing Gemini API key. Set GOOGLE_GENERATIVE_AI_API_KEY or pass apiKey."
+          "Missing Gemini API key. Set GOOGLE_GENERATIVE_AI_API_KEY, GEMINI_API_KEY, GOOGLE_API_KEY, or pass apiKey."
         );
       }
       return {

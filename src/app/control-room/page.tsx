@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import type { Provider } from '@/lib/types';
 
@@ -17,7 +17,7 @@ const PROVIDER_LABELS: Record<Provider, string> = {
 };
 
 const PROVIDER_DESCRIPTIONS: Record<Provider, string> = {
-  gemini: 'Free. Powered by Beagle. No setup needed.',
+  gemini: 'Free. No setup needed.',
   openai: 'BYOK. Fast and reliable.',
   anthropic: 'BYOK. Best for nuanced prompts.',
 };
@@ -31,6 +31,7 @@ export default function ControlRoomPage() {
   const [verifyStep, setVerifyStep] = useState(0);
   const [verifyRunning, setVerifyRunning] = useState(false);
   const [saving, setSaving] = useState(false);
+  const timersRef = useRef<ReturnType<typeof setTimeout>[]>([]);
 
   useEffect(() => {
     setMounted(true);
@@ -64,21 +65,24 @@ export default function ControlRoomPage() {
     };
   }, [mounted, router]);
 
+  useEffect(() => {
+    return () => {
+      timersRef.current.forEach(clearTimeout);
+    };
+  }, []);
+
   const handleVerify = () => {
     if (provider === 'gemini') return;
+    timersRef.current.forEach(clearTimeout);
+    timersRef.current = [];
     setVerifyRunning(true);
     setVerifyStep(0);
-    const t1 = setTimeout(() => setVerifyStep(1), 600);
-    const t2 = setTimeout(() => setVerifyStep(2), 1200);
-    const t3 = setTimeout(() => {
-      setVerifyStep(3);
-      setVerifyRunning(false);
-    }, 1800);
-    return () => {
-      clearTimeout(t1);
-      clearTimeout(t2);
-      clearTimeout(t3);
-    };
+    const t0 = setTimeout(() => setVerifyStep(1), 0);
+    const t1 = setTimeout(() => setVerifyStep(2), 600);
+    const t2 = setTimeout(() => setVerifyStep(3), 1200);
+    const t3 = setTimeout(() => setVerifyStep(4), 1800);
+    const t4 = setTimeout(() => setVerifyRunning(false), 2400);
+    timersRef.current = [t0, t1, t2, t3, t4];
   };
 
   const handleContinue = async () => {
@@ -122,18 +126,18 @@ export default function ControlRoomPage() {
 
   if (!mounted || !user) {
     return (
-      <div className="min-h-screen bg-[#050505] flex items-center justify-center">
+      <div className="flex min-h-screen items-center justify-center bg-[#050505]">
         <div className="text-[#ECECEC]">Loading…</div>
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-[#050505] text-[#ECECEC] p-6 md:p-10">
+    <div className="min-h-screen bg-[#050505] p-6 text-[#ECECEC] md:p-10">
       <div className="mx-auto max-w-3xl">
         <h1 className="text-2xl font-bold text-[#ECECEC]">Initialize Your AI Engine</h1>
         <p className="mt-2 text-zinc-400">
-          PromptPerfect works out of the box with Gemini. Connect your own AI provider for more control.
+          PromptPerfect works out of the box with Gemini. Connect your own AI for more control.
         </p>
 
         <div className="mt-8 grid grid-cols-1 gap-4 sm:grid-cols-3">
@@ -161,7 +165,7 @@ export default function ControlRoomPage() {
 
         {provider === 'gemini' ? (
           <div className="mt-8 rounded-xl border border-zinc-700 bg-zinc-900/50 p-6">
-            <p className="font-mono text-green-500 animate-[fade-in_0.3s_ease-out_forwards]">
+            <p className="animate-[fade-in_0.3s_ease-out_forwards] font-mono text-[#22c55e]">
               ✓ Gemini 2.0 Flash — Ready (no setup needed)
             </p>
             <button
@@ -176,10 +180,10 @@ export default function ControlRoomPage() {
         ) : (
           <>
             <div
-              className="mt-8 rounded-xl border border-[#333] bg-[#0d0d0d] p-6 font-mono text-sm"
+              className="mt-8 rounded-[12px] border border-[#333] bg-[#0d0d0d] p-6 font-mono text-sm"
               style={{ fontFamily: 'var(--font-geist-mono), monospace' }}
             >
-              <h3 className="text-[#ECECEC] font-semibold">🔐 Connect Your AI Engine</h3>
+              <h3 className="font-semibold text-[#ECECEC]">🔐 Connect Your AI Engine</h3>
               <div className="mt-4 space-y-3">
                 <p className="text-zinc-400">
                   Provider: {provider === 'openai' ? 'OpenAI' : 'Anthropic'}
@@ -208,18 +212,24 @@ export default function ControlRoomPage() {
             {verifyStep > 0 && (
               <div className="mt-4 space-y-2 font-mono text-sm">
                 {verifyStep >= 1 && (
-                  <p className="text-zinc-400 animate-[fade-in_0.3s_ease-out_forwards]">
+                  <p className="animate-[fade-in_0.3s_ease-out_forwards] text-zinc-400">
                     Connecting to {provider === 'openai' ? 'OpenAI' : 'Anthropic'}...
                   </p>
                 )}
                 {verifyStep >= 2 && (
-                  <p className="text-[#22c55e] animate-[fade-in_0.3s_ease-out_forwards]">✓ Provider reachable</p>
+                  <p className="animate-[fade-in_0.3s_ease-out_forwards] text-[#22c55e]">
+                    ✓ Provider reachable
+                  </p>
                 )}
                 {verifyStep >= 3 && (
-                  <>
-                    <p className="text-[#22c55e] animate-[fade-in_0.3s_ease-out_forwards]">✓ Key format valid</p>
-                    <p className="text-[#22c55e] animate-[fade-in_0.3s_ease-out_forwards]">✓ Ready to optimize</p>
-                  </>
+                  <p className="animate-[fade-in_0.3s_ease-out_forwards] text-[#22c55e]">
+                    ✓ Key format valid
+                  </p>
+                )}
+                {verifyStep >= 4 && (
+                  <p className="animate-[fade-in_0.3s_ease-out_forwards] text-[#22c55e]">
+                    ✓ Ready to optimize
+                  </p>
                 )}
               </div>
             )}

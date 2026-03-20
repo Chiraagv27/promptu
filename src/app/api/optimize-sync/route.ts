@@ -1,21 +1,31 @@
 import { generateText } from 'ai';
 import type { NextRequest } from 'next/server';
 
+import { getSupabaseAdminClient } from '@/lib/client/supabase';
+import { splitOptimizedOutput } from '@/lib/delimiter';
+import { normalizeModeForDb, parsePromptScore } from '@/lib/optimization-logs';
+import { createProvider } from '@/lib/providers';
 import { getSystemPrompt } from '@/lib/prompts';
+import type { OptimizationMode, OptimizeRequest, Provider } from '@/lib/types';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Methods': 'POST, OPTIONS',
   'Access-Control-Allow-Headers': 'Content-Type, Authorization',
 };
-import { splitOptimizedOutput } from '@/lib/delimiter';
-import { createProvider } from '@/lib/providers';
 
 const SCORE_PATTERN = /---SCORE---\d{1,3}---/g;
-import { getSupabaseAdminClient } from '@/lib/client/supabase';
-import type { OptimizationMode, OptimizeRequest, Provider } from '@/lib/types';
 
-const MODES: OptimizationMode[] = ['better', 'specific', 'cot', 'developer', 'research', 'beginner', 'product', 'marketing'];
+const MODES: OptimizationMode[] = [
+  'better',
+  'specific',
+  'cot',
+  'developer',
+  'research',
+  'beginner',
+  'product',
+  'marketing',
+];
 const PROVIDERS: Provider[] = ['gemini', 'openai', 'anthropic'];
 
 function isMode(v: unknown): v is OptimizationMode {
@@ -32,16 +42,32 @@ export async function OPTIONS() {
 
 export async function POST(req: NextRequest) {
   try {
-    const body = (await req.json()) as Partial<OptimizeRequest> & { version?: string };
+    const body = (await req.json()) as Partial<OptimizeRequest> & {
+      version?: string;
+      text?: string;
+    };
 
-    const prompt = typeof body.prompt === 'string' ? body.prompt.trim() : '';
-    if (!prompt) {
-      return Response.json({ error: 'prompt is required' }, { status: 400, headers: corsHeaders });
+    const promptRaw =
+      typeof body.text === 'string' && body.text.trim()
+        ? body.text.trim()
+        : typeof body.prompt === 'string'
+          ? body.prompt.trim()
+          : '';
+    if (!promptRaw) {
+      return Response.json(
+        { error: 'prompt or text is required' },
+        { status: 400, headers: corsHeaders },
+      );
     }
 
     const mode = isMode(body.mode) ? body.mode : 'better';
     const provider = isProvider(body.provider) ? body.provider : 'gemini';
-    const apiKey = typeof body.apiKey === 'string' ? body.apiKey.trim() : undefined;
+
+    const authHeader = req.headers.get('Authorization') || '';
+    const bearer = authHeader.startsWith('Bearer ') ? authHeader.slice(7).trim() : '';
+    const apiKeyFromBody =
+      typeof body.apiKey === 'string' ? body.apiKey.trim() : undefined;
+    const apiKey = bearer || apiKeyFromBody;
 
     let providerConfig;
     try {
@@ -49,7 +75,7 @@ export async function POST(req: NextRequest) {
     } catch (e) {
       return Response.json(
         { error: (e as Error).message },
-        { status: 400, headers: corsHeaders }
+        { status: 400, headers: corsHeaders },
       );
     }
 
@@ -60,28 +86,33 @@ export async function POST(req: NextRequest) {
       const result = await generateText({
         model,
         system,
-        prompt,
+        prompt: promptRaw,
       });
 
       const rawText = result.text ?? '';
-      const { optimizedText: rawOptimized, explanation, changes } = splitOptimizedOutput(rawText);
+      const { optimizedText: rawOptimized, explanation, changes } =
+        splitOptimizedOutput(rawText);
       const optimizedText = rawOptimized.replace(SCORE_PATTERN, '').trim();
+      const promptScore = parsePromptScore(rawText);
 
-      const sessionId = typeof body.session_id === 'string' ? body.session_id.trim() : '';
-      const version = body.version === 'v1' || body.version === 'v2' ? body.version : 'v1';
+      const sessionId =
+        typeof body.session_id === 'string' ? body.session_id.trim() : '';
+      const version =
+        body.version === 'v1' || body.version === 'v2' ? body.version : 'v1';
 
       if (sessionId) {
         const supabase = getSupabaseAdminClient();
         if (supabase) {
           void supabase.from('optimization_logs').insert({
             session_id: sessionId,
-            mode,
+            mode: normalizeModeForDb(mode),
             version,
             provider,
             model: modelId,
-            prompt_length: prompt.length,
+            prompt_length: promptRaw.length,
             optimized_length: optimizedText.length,
             explanation_length: explanation.length + changes.length,
+            ...(promptScore != null ? { prompt_score: promptScore } : {}),
           });
         }
       }
@@ -95,7 +126,7 @@ export async function POST(req: NextRequest) {
           provider,
           model: modelId,
         },
-        { headers: corsHeaders }
+        { headers: corsHeaders },
       );
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Failed to optimize prompt';
