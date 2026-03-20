@@ -1,65 +1,49 @@
-import { streamText } from 'ai';
-import type { NextRequest } from 'next/server';
-import { getSystemPrompt } from '@/lib/prompts';
-import { createProvider } from '@/lib/providers';
-import type { OptimizeRequest, OptimizationMode, Provider } from '@/lib/types';
+import { NextResponse } from "next/server";
+import { generateText } from "ai";
+import { getModel } from "@/lib/providers";
+import { getSystemPrompt } from "@/lib/prompts";
+import type { OptimizeMode } from "@/lib/prompts";
 
-const MODES: OptimizationMode[] = ['better', 'specific', 'cot', 'developer', 'research', 'beginner', 'product', 'marketing'];
-const PROVIDERS: Provider[] = ['gemini', 'openai', 'anthropic'];
+const DELIMITER = "---EXPLANATION---";
 
-function isMode(v: unknown): v is OptimizationMode {
-  return typeof v === 'string' && MODES.includes(v as OptimizationMode);
-}
-
-function isProvider(v: unknown): v is Provider {
-  return typeof v === 'string' && PROVIDERS.includes(v as Provider);
-}
-
-export async function POST(req: NextRequest) {
+export async function POST(request: Request) {
   try {
-    const body = (await req.json()) as Partial<OptimizeRequest>;
-    const prompt = typeof body.prompt === 'string' ? body.prompt.trim() : '';
-    if (!prompt) {
-      return Response.json({ error: 'prompt is required' }, { status: 400 });
-    }
+    const body = await request.json();
+    const { prompt, mode = "better", apiKey } = body as {
+      prompt?: string;
+      mode?: OptimizeMode;
+      apiKey?: string;
+    };
 
-    const mode = isMode(body.mode) ? body.mode : 'better';
-    const provider = isProvider(body.provider) ? body.provider : 'gemini';
-    const apiKey = typeof body.apiKey === 'string' ? body.apiKey.trim() : undefined;
-
-    if (provider !== 'gemini' && !apiKey) {
-      return Response.json(
-        { error: `${provider} requires an API key. Add it in settings.` },
-        { status: 401 },
+    if (!prompt || typeof prompt !== "string" || !prompt.trim()) {
+      return NextResponse.json(
+        { error: "Missing or empty prompt" },
+        { status: 400 }
       );
     }
 
-    const { model } = createProvider(provider, apiKey);
-    const system = getSystemPrompt(mode);
+    const model = getModel(apiKey ?? null);
+    const systemPrompt = getSystemPrompt(mode ?? "better");
 
-    const sessionId =
-      (typeof body.session_id === 'string' ? body.session_id.trim() : '') ||
-      crypto.randomUUID();
-
-    if (process.env.NODE_ENV === 'development') {
-      console.log('[optimize] session_id from body:', body.session_id ? 'yes' : 'MISSING', '→ using:', sessionId.slice(0, 8) + '…');
-    }
-
-    const result = streamText({
+    const { text } = await generateText({
       model,
-      system,
+      system: systemPrompt,
       prompt,
     });
 
-    const response = result.toTextStreamResponse({
-      headers: {
-        'X-PromptPerfect-Session-Id': sessionId,
-      },
-    });
+    const idx = text.indexOf(DELIMITER);
+    const optimizedText =
+      idx >= 0 ? text.slice(0, idx).trim() : text.trim();
+    const explanation =
+      idx >= 0 ? text.slice(idx + DELIMITER.length).trim() : "";
 
-    return response;
+    return NextResponse.json({
+      optimizedText,
+      explanation,
+      mode: mode ?? "better",
+    });
   } catch (err) {
-    const msg = err instanceof Error ? err.message : 'Failed to optimize';
-    return Response.json({ error: msg }, { status: 500 });
+    const message = err instanceof Error ? err.message : "Optimization failed";
+    return NextResponse.json({ error: message }, { status: 500 });
   }
 }

@@ -1,48 +1,83 @@
-import { createGoogleGenerativeAI } from '@ai-sdk/google';
-import { createOpenAI } from '@ai-sdk/openai';
-import { createAnthropic } from '@ai-sdk/anthropic';
-import type { Provider } from './types';
+import { createAnthropic } from "@ai-sdk/anthropic";
+import { createGoogleGenerativeAI } from "@ai-sdk/google";
+import { createOpenAI } from "@ai-sdk/openai";
+import type { LanguageModelV3 } from "@ai-sdk/provider";
+import type { Provider } from "@/lib/types";
 
-import type { LanguageModelV2, LanguageModelV3 } from '@ai-sdk/provider';
+const GEMINI_MODEL = "gemini-2.0-flash";
+const OPENAI_MODEL = "gpt-4o-mini";
+const ANTHROPIC_MODEL = "claude-3-5-haiku-latest";
 
 export interface ProviderConfig {
-  model: LanguageModelV2 | LanguageModelV3;
+  model: LanguageModelV3;
   modelId: string;
 }
 
-export function createProvider(providerId: Provider, apiKey?: string): ProviderConfig {
-  switch (providerId) {
-    case 'gemini': {
-      // Support both names (Vercel / some docs use GEMINI_API_KEY)
-      const key = (process.env.GOOGLE_API_KEY ?? process.env.GEMINI_API_KEY ?? '').trim();
-      if (!key) throw new Error('GOOGLE_API_KEY is not set. Add it in Vercel → Settings → Environment Variables, then redeploy.');
-      const google = createGoogleGenerativeAI({ apiKey: key });
-      return { model: google('gemini-2.0-flash'), modelId: 'gemini-2.0-flash' };
-    }
-    case 'openai': {
-      if (!apiKey?.trim()) throw new Error('OpenAI requires an API key');
-      const openai = createOpenAI({ apiKey: apiKey.trim() });
-      return { model: openai('gpt-4o-mini'), modelId: 'gpt-4o-mini' };
-    }
-    case 'anthropic': {
-      if (!apiKey?.trim()) throw new Error('Anthropic requires an API key');
-      const anthropic = createAnthropic({ apiKey: apiKey.trim() });
-      return { model: anthropic('claude-3-5-haiku-latest'), modelId: 'claude-3-5-haiku-latest' };
-    }
-    default:
-      throw new Error(`Unknown provider: ${providerId}`);
-  }
-}
-
-export function hasServerKey(providerId: Provider): boolean {
-  switch (providerId) {
-    case 'gemini':
-      return !!(process.env.GOOGLE_API_KEY || process.env.GEMINI_API_KEY);
-    case 'openai':
-      return !!process.env.OPENAI_API_KEY;
-    case 'anthropic':
-      return !!process.env.ANTHROPIC_API_KEY;
+export function hasServerKey(provider: Provider): boolean {
+  switch (provider) {
+    case "gemini":
+      return Boolean(
+        process.env.GOOGLE_GENERATIVE_AI_API_KEY ?? process.env.GEMINI_API_KEY
+      );
+    case "openai":
+      return Boolean(process.env.OPENAI_API_KEY);
+    case "anthropic":
+      return Boolean(process.env.ANTHROPIC_API_KEY);
     default:
       return false;
   }
+}
+
+export function createProvider(
+  provider: Provider,
+  apiKey?: string
+): ProviderConfig {
+  switch (provider) {
+    case "gemini": {
+      const key =
+        apiKey ??
+        process.env.GOOGLE_GENERATIVE_AI_API_KEY ??
+        process.env.GEMINI_API_KEY;
+      if (!key) {
+        throw new Error(
+          "Missing Gemini API key. Set GOOGLE_GENERATIVE_AI_API_KEY or pass apiKey."
+        );
+      }
+      return {
+        model: createGoogleGenerativeAI({ apiKey: key }).languageModel(
+          GEMINI_MODEL
+        ),
+        modelId: GEMINI_MODEL,
+      };
+    }
+    case "openai": {
+      const key = apiKey ?? process.env.OPENAI_API_KEY;
+      if (!key) {
+        throw new Error(
+          "Missing OpenAI API key. Set OPENAI_API_KEY or pass apiKey."
+        );
+      }
+      return {
+        model: createOpenAI({ apiKey: key }).languageModel(OPENAI_MODEL),
+        modelId: OPENAI_MODEL,
+      };
+    }
+    case "anthropic": {
+      const key = apiKey ?? process.env.ANTHROPIC_API_KEY;
+      if (!key) {
+        throw new Error(
+          "Missing Anthropic API key. Set ANTHROPIC_API_KEY or pass apiKey."
+        );
+      }
+      return {
+        model: createAnthropic({ apiKey: key }).languageModel(ANTHROPIC_MODEL),
+        modelId: ANTHROPIC_MODEL,
+      };
+    }
+  }
+}
+
+/** Legacy `/api/optimize` — Gemini only. */
+export function getModel(apiKey?: string | null): LanguageModelV3 {
+  return createProvider("gemini", apiKey ?? undefined).model;
 }
