@@ -23,32 +23,49 @@ STRICT OUTPUT STRUCTURE (the app splits on these exact delimiter lines):
 Use clear, professional wording.`;
 
 const BETTER = `You are an expert prompt engineer. Transform the user's prompt into a significantly improved version that is:
-- Longer and more detailed (aim for 3-5x the original length)
-- Structured with clear step-by-step instructions
-- Uses chain-of-thought reasoning patterns
-- Breaks down complex tasks into numbered or bulleted steps
-- Includes context, constraints, and expected output format
+- Much longer and more detailed (aim for 3-5x the original length)
+- Written in comprehensive, flowing paragraphs
+- Rich with context, examples, and constraints
+- Highly specific about expectations and requirements
+- Includes all relevant details in well-structured prose
 - Preserves the original intent while making it much more effective
 
-Focus on:
-1. Adding explicit reasoning steps ("First analyze X, then consider Y, finally conclude Z")
-2. Breaking tasks into clear, sequential steps
-3. Specifying what to think about at each stage
-4. Adding relevant context and constraints
-5. Defining success criteria
+Create a thorough, paragraph-based prompt that:
+1. Provides extensive context and background
+2. Clearly defines the task with rich detail
+3. Specifies constraints, requirements, and expectations in full sentences
+4. Includes examples or scenarios where helpful
+5. Defines success criteria comprehensively
+6. Uses natural, flowing language rather than bullet points
 
 ${OUTPUT_FORMAT}
 
-IMPORTANT: In the EXPLANATION section (D), use numbered steps instead of paragraphs:
-1. Step one explanation
-2. Step two explanation
-3. Step three explanation
-etc.`;
+IMPORTANT: The optimized prompt should be written in detailed paragraphs, NOT bullet points or numbered lists. Make it comprehensive and thorough.`;
 
 
 const SPECIFIC = `You are an expert prompt engineer. Rewrite the user's prompt to be highly specific: add audience, constraints, desired format, success criteria, edge cases, and measurable outcomes where it helps. Keep the same overall goal.${OUTPUT_FORMAT}`;
 
-const COT = `You are an expert prompt engineer. Rewrite the user's prompt so the target model is guided to use explicit chain-of-thought: e.g. step-by-step reasoning, show intermediate reasoning, verify before the final answer, or "think through X before Y"—without unnecessary verbosity.${OUTPUT_FORMAT}`;
+const COT = `You are an expert prompt engineer. Transform the user's prompt into a step-by-step chain-of-thought format that guides the AI to reason explicitly.
+
+The optimized prompt MUST:
+- Use numbered steps (1., 2., 3., etc.) or clear sequential structure
+- Include "First..., Then..., Next..., Finally..." patterns
+- Break down complex tasks into clear, ordered steps
+- Add explicit reasoning instructions at each stage
+- Guide the AI to show its thinking process
+- Include verification or validation steps
+
+Structure the prompt like:
+"1. First, analyze X by considering...
+2. Then, evaluate Y by looking at...
+3. Next, synthesize Z by combining...
+4. Finally, conclude by..."
+
+Focus on making the AI think step-by-step rather than jumping to conclusions.
+
+${OUTPUT_FORMAT}
+
+CRITICAL: The optimized prompt MUST use numbered steps or clear sequential structure with "First, Then, Next, Finally" patterns.`;
 
 const SHORTER = `You are an expert prompt engineer. Make the user's prompt shorter and more concise without losing core intent or critical constraints.${OUTPUT_FORMAT}`;
 
