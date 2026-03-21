@@ -1,6 +1,6 @@
 "use client";
 
-import ReactDiffViewer from "react-diff-viewer-continued";
+import ReactDiffViewer, { DiffMethod } from "react-diff-viewer-continued";
 import { useTheme } from "@/components/ThemeProvider";
 
 export interface DiffViewProps {
@@ -18,6 +18,7 @@ export function DiffView({ original, optimized }: DiffViewProps) {
         oldValue={original}
         newValue={optimized}
         splitView
+        compareMethod={DiffMethod.WORDS_WITH_SPACE}
         useDarkTheme={useDarkTheme}
         showDiffOnly={false}
       />

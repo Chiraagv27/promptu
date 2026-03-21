@@ -1,13 +1,19 @@
 'use client';
 
 import { useCompletion } from '@ai-sdk/react';
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { PromptInput } from '@/components/PromptInput';
 import { AppModeSelector } from '@/components/AppModeSelector';
 import { StreamingPromptOutput } from '@/components/StreamingPromptOutput';
 import { ExplanationPanel } from '@/components/ExplanationPanel';
+import { HistoryPanel, type OptimizationHistoryItem } from '@/components/HistoryPanel';
+import {
+  explanationTextFromFullCompletion,
+  optimizedTextFromFullCompletion,
+  saveToHistory,
+} from '@/lib/client/optimizationHistory';
 import { FeedbackButtons } from '@/components/FeedbackButtons';
 import { StatsBar } from '@/components/StatsBar';
 import { AppSettingsPanel } from '@/components/AppSettingsPanel';
@@ -70,7 +76,9 @@ export default function AppPage() {
   } | null>(null);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [statsRefresh, setStatsRefresh] = useState(0);
+  const [historyRefresh, setHistoryRefresh] = useState(0);
   const [hydrated, setHydrated] = useState(false);
+  const optimizeContextRef = useRef({ mode: 'better' as OptimizationMode });
 
   const [syncCompletion, setSyncCompletion] = useState('');
   const [syncLoading, setSyncLoading] = useState(false);
@@ -106,6 +114,10 @@ export default function AppPage() {
   }, [provider]);
 
   useEffect(() => {
+    optimizeContextRef.current.mode = selectedMode;
+  }, [selectedMode]);
+
+  useEffect(() => {
     const open = () => setSettingsOpen(true);
     document.addEventListener('open-settings', open);
     return () => document.removeEventListener('open-settings', open);
@@ -116,6 +128,7 @@ export default function AppPage() {
   const {
     completion: streamCompletion,
     complete,
+    setCompletion: setStreamCompletion,
     isLoading: streamLoading,
     error: streamError,
   } = useCompletion({
@@ -125,7 +138,16 @@ export default function AppPage() {
       mode: selectedMode,
       provider,
     },
-    onFinish: () => setStatsRefresh((n) => n + 1),
+    onFinish: (prompt, completion) => {
+      setStatsRefresh((n) => n + 1);
+      setHistoryRefresh((n) => n + 1);
+      void saveToHistory({
+        prompt_original: prompt.trim(),
+        prompt_optimized: optimizedTextFromFullCompletion(completion),
+        mode: optimizeContextRef.current.mode,
+        explanation: explanationTextFromFullCompletion(completion),
+      });
+    },
     fetch: async (input, init) => {
       const res = await fetch(input, init);
       if (!res.ok) {
@@ -156,6 +178,7 @@ export default function AppPage() {
     if (!inputText.trim()) return;
     const sid = generateSessionId();
     const trimmed = inputText.trim();
+    optimizeContextRef.current.mode = selectedMode;
     setExplanation('');
     setSessionId(sid);
     setRunMeta({ mode: selectedMode, provider, inputLength: trimmed.length });
@@ -216,6 +239,13 @@ export default function AppPage() {
           setSyncCompletion(full);
           setExplanation(expl || '');
           setStatsRefresh((n) => n + 1);
+          setHistoryRefresh((n) => n + 1);
+          void saveToHistory({
+            prompt_original: trimmed,
+            prompt_optimized: (optimizedText ?? '').trim(),
+            mode: selectedMode,
+            explanation: (expl ?? '').trim(),
+          });
         })
         .catch((err) =>
           setSyncError(err instanceof Error ? err.message : 'Request failed'),
@@ -223,6 +253,28 @@ export default function AppPage() {
         .finally(() => setSyncLoading(false));
     }
   }, [inputText, selectedMode, provider, apiKey, hasApiKey, isGemini, complete]);
+
+  const [selectedHistoryItem, setSelectedHistoryItem] =
+    useState<OptimizationHistoryItem | null>(null);
+
+  const handleHistorySelect = useCallback(
+    (item: OptimizationHistoryItem) => {
+      setSelectedHistoryItem(item);
+      const full =
+        item.prompt_optimized +
+        (item.explanation.trim()
+          ? `\n${EXPLANATION_DELIMITER}\n${item.explanation.trim()}`
+          : '');
+      setInputText(item.prompt_original);
+      setExplanation(item.explanation || '');
+      if (isGemini) {
+        setStreamCompletion(full);
+      } else {
+        setSyncCompletion(full);
+      }
+    },
+    [isGemini, setStreamCompletion],
+  );
 
   const handleLogout = () => {
     localStorage.removeItem('pp_user');
@@ -238,7 +290,7 @@ export default function AppPage() {
   }
 
   return (
-    <div className="flex min-h-screen w-full max-w-[100vw] flex-col bg-[#050505] font-sans">
+    <div className="relative flex min-h-screen w-full max-w-[100vw] flex-col bg-[#050505] font-sans md:pr-72">
       <header className="flex h-14 shrink-0 items-center justify-between border-b border-[#1a1a1a] px-6">
         <Link href="/" className="flex items-baseline gap-2">
           <span className="text-lg font-bold text-[#ECECEC]">PromptPerfect</span>
@@ -335,7 +387,11 @@ export default function AppPage() {
         )}
 
         <div className="mt-2 w-full shrink-0 px-6 pb-8">
-          <ExplanationPanel explanation={explanation} />
+          <ExplanationPanel
+            explanation={explanation}
+            original={inputText}
+            optimized={getOptimizedPromptText(completion)}
+          />
         </div>
       </main>
 
@@ -349,6 +405,14 @@ export default function AppPage() {
         onApiKeyChange={setApiKey}
         onSaveSuccess={() => setStatsRefresh((n) => n + 1)}
       />
+
+      <aside className="fixed bottom-0 right-0 top-14 z-30 hidden h-[calc(100vh-3.5rem)] w-72 md:block">
+        <HistoryPanel
+          onSelect={handleHistorySelect}
+          refreshTrigger={historyRefresh}
+          selectedId={selectedHistoryItem?.id ?? null}
+        />
+      </aside>
     </div>
   );
 }
