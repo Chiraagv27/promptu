@@ -265,6 +265,7 @@ export default function AppPage() {
   const handleHistorySelect = useCallback(
     (item: OptimizationHistoryItem) => {
       setSelectedHistoryItem(item);
+      setHistoryId(item.id); // Set the history ID so Share button appears
       const full =
         item.prompt_optimized +
         (item.explanation.trim()
@@ -295,35 +296,37 @@ export default function AppPage() {
   }
 
   return (
-    <div className="relative flex min-h-screen w-full max-w-[100vw] flex-col bg-[#050505] font-sans md:pr-72">
-      <header className="flex h-14 shrink-0 items-center justify-between border-b border-[#1a1a1a] px-6">
-        <Link href="/" className="flex items-baseline gap-2">
-          <span className="text-lg font-bold text-[#ECECEC]">PromptPerfect</span>
-          <span className="text-sm text-[#666]">by Beagle</span>
-        </Link>
-        <div className="flex items-center gap-2 sm:gap-3">
-          <span className="hidden text-sm text-[#888] sm:inline">
-            Hi, {user.name || user.email}
-          </span>
-          <button
-            type="button"
-            onClick={() => setSettingsOpen(true)}
-            className="rounded-lg border border-transparent px-3 py-1.5 text-sm text-[#888] transition-all duration-200 ease-out hover:border-[#2a2a2a] hover:bg-[#111] hover:text-[#ECECEC]"
-            aria-label="Settings"
-          >
-            ⚙️ Settings
-          </button>
-          <button
-            type="button"
-            onClick={handleLogout}
-            className="rounded-lg border border-transparent px-3 py-1.5 text-sm text-[#888] transition-all duration-200 ease-out hover:border-[#2a2a2a] hover:bg-[#111] hover:text-[#ECECEC]"
-          >
-            Log out
-          </button>
+    <div className="relative flex min-h-screen w-full flex-col bg-[#050505] font-sans md:pr-72">
+      <header className="fixed left-0 right-0 top-0 z-40 flex h-14 shrink-0 items-center border-b border-[#1a1a1a] bg-[#050505]/95 backdrop-blur-sm">
+        <div className="mx-auto flex w-full max-w-screen-2xl items-center justify-between px-6 md:px-8">
+          <Link href="/" className="flex items-baseline gap-2">
+            <span className="text-lg font-bold text-[#ECECEC]">PromptPerfect</span>
+            <span className="text-sm text-[#666]">by Beagle</span>
+          </Link>
+          <div className="flex items-center gap-2 sm:gap-3">
+            <span className="hidden text-sm text-[#888] sm:inline">
+              Hi, {user.name || user.email}
+            </span>
+            <button
+              type="button"
+              onClick={() => setSettingsOpen(true)}
+              className="rounded-lg border border-transparent px-3 py-1.5 text-sm text-[#888] transition-all duration-200 ease-out hover:border-[#2a2a2a] hover:bg-[#111] hover:text-[#ECECEC]"
+              aria-label="Settings"
+            >
+              ⚙️ Settings
+            </button>
+            <button
+              type="button"
+              onClick={handleLogout}
+              className="rounded-lg border border-transparent px-3 py-1.5 text-sm text-[#888] transition-all duration-200 ease-out hover:border-[#2a2a2a] hover:bg-[#111] hover:text-[#ECECEC]"
+            >
+              Log out
+            </button>
+          </div>
         </div>
       </header>
 
-      <main className="flex min-h-0 w-full flex-1 flex-col overflow-y-auto overflow-x-hidden overscroll-y-contain">
+      <main className="smooth-scroll mt-14 flex min-h-0 w-full flex-1 flex-col overflow-y-auto overflow-x-hidden">
         <div className="shrink-0 px-6 pt-5">
           <StatsBar refreshTrigger={statsRefresh} />
         </div>

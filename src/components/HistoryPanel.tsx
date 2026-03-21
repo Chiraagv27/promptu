@@ -80,7 +80,7 @@ export function HistoryPanel({
           History
         </span>
       </div>
-      <div className="min-h-0 flex-1 overflow-y-auto">
+      <div className="min-h-0 flex-1 overflow-y-auto pp-history-scroll">
         {loading ? (
           <p className="px-3 py-2 text-[13px] text-[#666]">Loading…</p>
         ) : rows.length === 0 ? (
