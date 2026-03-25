@@ -1,14 +1,21 @@
 'use client';
 
 import { useCompletion } from '@ai-sdk/react';
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { PromptInput } from '@/components/PromptInput';
 import { AppModeSelector } from '@/components/AppModeSelector';
 import { StreamingPromptOutput } from '@/components/StreamingPromptOutput';
 import { ExplanationPanel } from '@/components/ExplanationPanel';
+import { HistoryPanel, type OptimizationHistoryItem } from '@/components/HistoryPanel';
+import {
+  explanationTextFromFullCompletion,
+  optimizedTextFromFullCompletion,
+  saveToHistory,
+} from '@/lib/client/optimizationHistory';
 import { FeedbackButtons } from '@/components/FeedbackButtons';
+import { ShareButton } from '@/components/ShareButton';
 import { StatsBar } from '@/components/StatsBar';
 import { AppSettingsPanel } from '@/components/AppSettingsPanel';
 import type { OptimizationMode, Provider } from '@/lib/types';
@@ -63,6 +70,7 @@ export default function AppPage() {
   const [apiKey, setApiKey] = useState('');
   const [explanation, setExplanation] = useState('');
   const [sessionId, setSessionId] = useState<string | null>(null);
+  const [historyId, setHistoryId] = useState<string | null>(null);
   const [runMeta, setRunMeta] = useState<{
     mode: OptimizationMode;
     provider: Provider;
@@ -70,7 +78,9 @@ export default function AppPage() {
   } | null>(null);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [statsRefresh, setStatsRefresh] = useState(0);
+  const [historyRefresh, setHistoryRefresh] = useState(0);
   const [hydrated, setHydrated] = useState(false);
+  const optimizeContextRef = useRef({ mode: 'better' as OptimizationMode });
 
   const [syncCompletion, setSyncCompletion] = useState('');
   const [syncLoading, setSyncLoading] = useState(false);
@@ -106,6 +116,10 @@ export default function AppPage() {
   }, [provider]);
 
   useEffect(() => {
+    optimizeContextRef.current.mode = selectedMode;
+  }, [selectedMode]);
+
+  useEffect(() => {
     const open = () => setSettingsOpen(true);
     document.addEventListener('open-settings', open);
     return () => document.removeEventListener('open-settings', open);
@@ -116,6 +130,7 @@ export default function AppPage() {
   const {
     completion: streamCompletion,
     complete,
+    setCompletion: setStreamCompletion,
     isLoading: streamLoading,
     error: streamError,
   } = useCompletion({
@@ -125,7 +140,17 @@ export default function AppPage() {
       mode: selectedMode,
       provider,
     },
-    onFinish: () => setStatsRefresh((n) => n + 1),
+    onFinish: async (prompt, completion) => {
+      setStatsRefresh((n) => n + 1);
+      setHistoryRefresh((n) => n + 1);
+      const histId = await saveToHistory({
+        prompt_original: prompt.trim(),
+        prompt_optimized: optimizedTextFromFullCompletion(completion),
+        mode: optimizeContextRef.current.mode,
+        explanation: explanationTextFromFullCompletion(completion),
+      });
+      setHistoryId(histId);
+    },
     fetch: async (input, init) => {
       const res = await fetch(input, init);
       if (!res.ok) {
@@ -156,8 +181,10 @@ export default function AppPage() {
     if (!inputText.trim()) return;
     const sid = generateSessionId();
     const trimmed = inputText.trim();
+    optimizeContextRef.current.mode = selectedMode;
     setExplanation('');
     setSessionId(sid);
+    setHistoryId(null); // Reset history ID for new optimization
     setRunMeta({ mode: selectedMode, provider, inputLength: trimmed.length });
 
     const coreBody = {
@@ -203,7 +230,7 @@ export default function AppPage() {
             rawText?: string;
           };
         })
-        .then((data) => {
+        .then(async (data) => {
           const { optimizedText, explanation: expl, changes, rawText } = data;
           const raw = typeof rawText === 'string' ? rawText : '';
           const scoreMatch = raw.match(SCORE_PATTERN);
@@ -216,6 +243,14 @@ export default function AppPage() {
           setSyncCompletion(full);
           setExplanation(expl || '');
           setStatsRefresh((n) => n + 1);
+          setHistoryRefresh((n) => n + 1);
+          const histId = await saveToHistory({
+            prompt_original: trimmed,
+            prompt_optimized: (optimizedText ?? '').trim(),
+            mode: selectedMode,
+            explanation: (expl ?? '').trim(),
+          });
+          setHistoryId(histId);
         })
         .catch((err) =>
           setSyncError(err instanceof Error ? err.message : 'Request failed'),
@@ -223,6 +258,29 @@ export default function AppPage() {
         .finally(() => setSyncLoading(false));
     }
   }, [inputText, selectedMode, provider, apiKey, hasApiKey, isGemini, complete]);
+
+  const [selectedHistoryItem, setSelectedHistoryItem] =
+    useState<OptimizationHistoryItem | null>(null);
+
+  const handleHistorySelect = useCallback(
+    (item: OptimizationHistoryItem) => {
+      setSelectedHistoryItem(item);
+      setHistoryId(item.id); // Set the history ID so Share button appears
+      const full =
+        item.prompt_optimized +
+        (item.explanation.trim()
+          ? `\n${EXPLANATION_DELIMITER}\n${item.explanation.trim()}`
+          : '');
+      setInputText(item.prompt_original);
+      setExplanation(item.explanation || '');
+      if (isGemini) {
+        setStreamCompletion(full);
+      } else {
+        setSyncCompletion(full);
+      }
+    },
+    [isGemini, setStreamCompletion],
+  );
 
   const handleLogout = () => {
     localStorage.removeItem('pp_user');
@@ -238,35 +296,37 @@ export default function AppPage() {
   }
 
   return (
-    <div className="flex min-h-screen w-full max-w-[100vw] flex-col bg-[#050505] font-sans">
-      <header className="flex h-14 shrink-0 items-center justify-between border-b border-[#1a1a1a] px-6">
-        <Link href="/" className="flex items-baseline gap-2">
-          <span className="text-lg font-bold text-[#ECECEC]">PromptPerfect</span>
-          <span className="text-sm text-[#666]">by Beagle</span>
-        </Link>
-        <div className="flex items-center gap-2 sm:gap-3">
-          <span className="hidden text-sm text-[#888] sm:inline">
-            Hi, {user.name || user.email}
-          </span>
-          <button
-            type="button"
-            onClick={() => setSettingsOpen(true)}
-            className="rounded-lg border border-transparent px-3 py-1.5 text-sm text-[#888] transition-all duration-200 ease-out hover:border-[#2a2a2a] hover:bg-[#111] hover:text-[#ECECEC]"
-            aria-label="Settings"
-          >
-            ⚙️ Settings
-          </button>
-          <button
-            type="button"
-            onClick={handleLogout}
-            className="rounded-lg border border-transparent px-3 py-1.5 text-sm text-[#888] transition-all duration-200 ease-out hover:border-[#2a2a2a] hover:bg-[#111] hover:text-[#ECECEC]"
-          >
-            Log out
-          </button>
+    <div className="relative flex min-h-screen w-full flex-col bg-[#050505] font-sans md:pr-72">
+      <header className="fixed left-0 right-0 top-0 z-40 flex h-14 shrink-0 items-center border-b border-[#1a1a1a] bg-[#050505]/95 backdrop-blur-sm">
+        <div className="mx-auto flex w-full max-w-screen-2xl items-center justify-between px-6 md:px-8">
+          <Link href="/" className="flex items-baseline gap-2">
+            <span className="text-lg font-bold text-[#ECECEC]">PromptPerfect</span>
+            <span className="text-sm text-[#666]">by Beagle</span>
+          </Link>
+          <div className="flex items-center gap-2 sm:gap-3">
+            <span className="hidden text-sm text-[#888] sm:inline">
+              Hi, {user.name || user.email}
+            </span>
+            <button
+              type="button"
+              onClick={() => setSettingsOpen(true)}
+              className="rounded-lg border border-transparent px-3 py-1.5 text-sm text-[#888] transition-all duration-200 ease-out hover:border-[#2a2a2a] hover:bg-[#111] hover:text-[#ECECEC]"
+              aria-label="Settings"
+            >
+              ⚙️ Settings
+            </button>
+            <button
+              type="button"
+              onClick={handleLogout}
+              className="rounded-lg border border-transparent px-3 py-1.5 text-sm text-[#888] transition-all duration-200 ease-out hover:border-[#2a2a2a] hover:bg-[#111] hover:text-[#ECECEC]"
+            >
+              Log out
+            </button>
+          </div>
         </div>
       </header>
 
-      <main className="flex min-h-0 w-full flex-1 flex-col overflow-y-auto overflow-x-hidden overscroll-y-contain">
+      <main className="smooth-scroll mt-14 flex min-h-0 w-full flex-1 flex-col overflow-y-auto overflow-x-hidden">
         <div className="shrink-0 px-6 pt-5">
           <StatsBar refreshTrigger={statsRefresh} />
         </div>
@@ -290,15 +350,18 @@ export default function AppPage() {
               onExplanation={setExplanation}
               afterTextarea={
                 completion && !isLoading ? (
-                  <FeedbackButtons
-                    sessionId={sessionId}
-                    mode={runMeta?.mode ?? selectedMode}
-                    provider={runMeta?.provider ?? provider}
-                    inputLength={runMeta?.inputLength ?? inputText.trim().length}
-                    outputLength={getOptimizedPromptText(completion).length}
-                    disabled={false}
-                    onSubmitted={() => setStatsRefresh((n) => n + 1)}
-                  />
+                  <div className="flex items-center gap-3">
+                    {historyId && <ShareButton historyId={historyId} />}
+                    <FeedbackButtons
+                      sessionId={sessionId}
+                      mode={runMeta?.mode ?? selectedMode}
+                      provider={runMeta?.provider ?? provider}
+                      inputLength={runMeta?.inputLength ?? inputText.trim().length}
+                      outputLength={getOptimizedPromptText(completion).length}
+                      disabled={false}
+                      onSubmitted={() => setStatsRefresh((n) => n + 1)}
+                    />
+                  </div>
                 ) : null
               }
             />
@@ -335,7 +398,11 @@ export default function AppPage() {
         )}
 
         <div className="mt-2 w-full shrink-0 px-6 pb-8">
-          <ExplanationPanel explanation={explanation} />
+          <ExplanationPanel
+            explanation={explanation}
+            original={inputText}
+            optimized={getOptimizedPromptText(completion)}
+          />
         </div>
       </main>
 
@@ -349,6 +416,14 @@ export default function AppPage() {
         onApiKeyChange={setApiKey}
         onSaveSuccess={() => setStatsRefresh((n) => n + 1)}
       />
+
+      <aside className="fixed bottom-0 right-0 top-14 z-30 hidden h-[calc(100vh-3.5rem)] w-72 md:block">
+        <HistoryPanel
+          onSelect={handleHistorySelect}
+          refreshTrigger={historyRefresh}
+          selectedId={selectedHistoryItem?.id ?? null}
+        />
+      </aside>
     </div>
   );
 }

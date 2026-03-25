@@ -58,7 +58,8 @@ export async function postOptimizeSync(args: OptimizeApiArgs): Promise<OptimizeS
   });
 
   if (!res.ok) throw new Error(await readErrorMessage(res));
-  return (await res.json()) as OptimizeSyncResult;
+  const result = (await res.json()) as OptimizeSyncResult;
+  return result;
 }
 
 export async function postOptimizeStream(args: OptimizeApiArgs): Promise<{
